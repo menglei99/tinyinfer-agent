@@ -1,0 +1,13 @@
+{
+  "_comment": "Add this entry to your claude_desktop_config.json under mcpServers. Replace REPO_DIR with the absolute path to this clone (e.g. D:/tinyinfer-agent on Windows, or /Users/you/tinyinfer-agent on macOS).",
+  "mcpServers": {
+    "tinyinfer-toolchain": {
+      "command": "REPO_DIR/.venv/Scripts/python.exe",
+      "args": ["-m", "agent.mcp.server"],
+      "env": {
+        "TINYINFER_PROJECT_DIR": "REPO_DIR/tinyinfer",
+        "TINYINFER_BUILD_DIR": "REPO_DIR/tinyinfer/build"
+      }
+    }
+  }
+}

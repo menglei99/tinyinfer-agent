@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+*.egg
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Env / secrets
+.env
+.env.local
+*.key
+
+# C++ build
+tinyinfer/build/
+tinyinfer/cmake-build-*/
+*.o
+*.a
+*.so.*
+*.dll
+*.exe
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Trace / runs
+traces/
+runs/
+*.jsonl.tmp
+
+# Demo outputs (keep dir, ignore generated content)
+demo/generated_tests/*.cpp
+demo/generated_tests/*.json
+!demo/generated_tests/.gitkeep

@@ -1,0 +1,40 @@
+diff --git a/tinyinfer/src/matmul.cpp b/tinyinfer/src/matmul.cpp
+index abcdef0..fedcba9 100644
+--- a/tinyinfer/src/matmul.cpp
++++ b/tinyinfer/src/matmul.cpp
+@@ -1,4 +1,5 @@
+ #include "tinyinfer/matmul.hpp"
+
++#include <cstring>
+ #include <stdexcept>
+
+@@ -7,15 +8,21 @@ bool matmul_fp32(const float* a, const float* b, float* c,
+                  std::size_t m, std::size_t k, std::size_t n) {
+     if (a == nullptr || b == nullptr || c == nullptr) {
+         return false;
+     }
++    // Zero-init output via memset rather than the loop; allocator path
++    // is now on the hot path of the SIMD-tiled kernel below.
++    std::memset(c, 0, m * n * sizeof(float));
+
+-    for (std::size_t i = 0; i < m; ++i) {
+-        for (std::size_t j = 0; j < n; ++j) {
+-            float acc = 0.0f;
+-            for (std::size_t p = 0; p < k; ++p) {
+-                acc += a[i * k + p] * b[p * n + j];
++    // Tiled, SIMD-friendly kernel. Cache-blocked on K for hot-path perf.
++    constexpr std::size_t TILE = 16;
++    for (std::size_t i = 0; i < m; ++i) {
++        for (std::size_t p0 = 0; p0 < k; p0 += TILE) {
++            const std::size_t p_end = std::min(p0 + TILE, k);
++            for (std::size_t p = p0; p < p_end; ++p) {
++                const float a_ip = a[i * k + p];
++                for (std::size_t j = 0; j < n; ++j) {
++                    c[i * n + j] += a_ip * b[p * n + j];
++                }
+             }
+-            c[i * n + j] = acc;
+         }
+     }
+     return true;
+ }

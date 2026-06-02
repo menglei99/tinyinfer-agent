@@ -1,0 +1,43 @@
+diff --git a/tinyinfer/include/tinyinfer/softmax.hpp b/tinyinfer/include/tinyinfer/softmax.hpp
+new file mode 100644
+index 0000000..1234567
+--- /dev/null
++++ b/tinyinfer/include/tinyinfer/softmax.hpp
+@@ -0,0 +1,15 @@
++#pragma once
++
++#include <cstddef>
++
++namespace tinyinfer {
++
++// 1D softmax over a contiguous buffer.
++bool softmax_fp32(const float* x, float* y, std::size_t n);
++
++}  // namespace tinyinfer
+diff --git a/tinyinfer/src/softmax.cpp b/tinyinfer/src/softmax.cpp
+new file mode 100644
+index 0000000..2345678
+--- /dev/null
++++ b/tinyinfer/src/softmax.cpp
+@@ -0,0 +1,30 @@
++#include "tinyinfer/softmax.hpp"
++
++#include <algorithm>
++#include <cmath>
++
++namespace tinyinfer {
++
++bool softmax_fp32(const float* x, float* y, std::size_t n) {
++    if (x == nullptr || y == nullptr || n == 0) return false;
++    float m = x[0];
++    for (std::size_t i = 1; i < n; ++i) m = std::max(m, x[i]);
++    float s = 0.0f;
++    for (std::size_t i = 0; i < n; ++i) {
++        y[i] = std::exp(x[i] - m);
++        s += y[i];
++    }
++    for (std::size_t i = 0; i < n; ++i) y[i] /= s;
++    return true;
++}
++
++}  // namespace tinyinfer

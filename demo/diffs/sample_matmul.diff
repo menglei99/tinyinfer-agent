@@ -1,0 +1,40 @@
+diff --git a/tinyinfer/src/matmul.cpp b/tinyinfer/src/matmul.cpp
+index 1234567..abcdef0 100644
+--- a/tinyinfer/src/matmul.cpp
++++ b/tinyinfer/src/matmul.cpp
+@@ -10,12 +10,15 @@ bool matmul_fp32(const float* a, const float* b, float* c,
+         return false;
+     }
+
+-    for (std::size_t i = 0; i < m; ++i) {
+-        for (std::size_t j = 0; j < n; ++j) {
+-            float acc = 0.0f;
+-            for (std::size_t p = 0; p < k; ++p) {
+-                acc += a[i * k + p] * b[p * n + j];
+-            }
++    // Reordered loops (i, p, j) for better cache locality on B.
++    // This is a real optimisation pattern; we want regression tests to
++    // catch any numerical drift introduced by the reorder.
++    for (std::size_t i = 0; i < m; ++i) {
++        for (std::size_t p = 0; p < k; ++p) {
++            const float a_ip = a[i * k + p];
++            for (std::size_t j = 0; j < n; ++j) {
++                c[i * n + j] += a_ip * b[p * n + j];
++            }
++        }
++    }
++    return true;
++}
++
++// (kept for reference) original triple-loop variant
++bool matmul_fp32_v0(const float* a, const float* b, float* c,
++                    std::size_t m, std::size_t k, std::size_t n) {
++    for (std::size_t i = 0; i < m; ++i) {
++        for (std::size_t j = 0; j < n; ++j) {
++            float acc = 0.0f;
++            for (std::size_t p = 0; p < k; ++p) {
++                acc += a[i * k + p] * b[p * n + j];
++            }
+             c[i * n + j] = acc;
+         }
+     }

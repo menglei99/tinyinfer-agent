@@ -1,0 +1,52 @@
+diff --git a/tinyinfer/include/tinyinfer/layernorm.hpp b/tinyinfer/include/tinyinfer/layernorm.hpp
+new file mode 100644
+index 0000000..1234567
+--- /dev/null
++++ b/tinyinfer/include/tinyinfer/layernorm.hpp
+@@ -0,0 +1,15 @@
++#pragma once
++
++#include <cstddef>
++
++namespace tinyinfer {
++
++// 1D LayerNorm. gamma/beta optional.
++bool layernorm_fp32(const float* x, float* y, std::size_t n,
++                    const float* gamma, const float* beta, float eps);
++
++}  // namespace tinyinfer
+diff --git a/tinyinfer/src/layernorm.cpp b/tinyinfer/src/layernorm.cpp
+new file mode 100644
+index 0000000..2345678
+--- /dev/null
++++ b/tinyinfer/src/layernorm.cpp
+@@ -0,0 +1,28 @@
++#include "tinyinfer/layernorm.hpp"
++
++#include <cmath>
++
++namespace tinyinfer {
++
++bool layernorm_fp32(const float* x, float* y, std::size_t n,
++                    const float* gamma, const float* beta, float eps) {
++    if (!x || !y || n == 0) return false;
++    float mean = 0.0f;
++    for (std::size_t i = 0; i < n; ++i) mean += x[i];
++    mean /= static_cast<float>(n);
++    float var = 0.0f;
++    for (std::size_t i = 0; i < n; ++i) {
++        const float d = x[i] - mean;
++        var += d * d;
++    }
++    var /= static_cast<float>(n);
++    const float inv_std = 1.0f / std::sqrt(var + eps);
++    for (std::size_t i = 0; i < n; ++i) {
++        float v = (x[i] - mean) * inv_std;
++        if (gamma) v *= gamma[i];
++        if (beta) v += beta[i];
++        y[i] = v;
++    }
++    return true;
++}
++
++}  // namespace tinyinfer
