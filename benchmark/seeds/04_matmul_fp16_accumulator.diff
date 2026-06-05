@@ -1,0 +1,16 @@
+diff --git a/tinyinfer/src/matmul.cpp b/tinyinfer/src/matmul.cpp
+index 1111111..5555555 100644
+--- a/tinyinfer/src/matmul.cpp
++++ b/tinyinfer/src/matmul.cpp
+@@ -13,9 +13,10 @@ bool matmul_fp32(const float* a, const float* b, float* c,
+     for (std::size_t i = 0; i < m; ++i) {
+         for (std::size_t j = 0; j < n; ++j) {
+-            float acc = 0.0f;
++            // BUG: fp16-width accumulator loses precision on long-k reductions.
++            _Float16 acc = 0.0f;
+             for (std::size_t p = 0; p < k; ++p) {
+-                acc += a[i * k + p] * b[p * n + j];
++                acc += (_Float16)(a[i * k + p] * b[p * n + j]);
+             }
+             c[i * n + j] = acc;
+         }

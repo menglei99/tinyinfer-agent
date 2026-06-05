@@ -1,0 +1,13 @@
+diff --git a/tinyinfer/src/layernorm.cpp b/tinyinfer/src/layernorm.cpp
+index aaaaaaa..bbbbbbb 100644
+--- a/tinyinfer/src/layernorm.cpp
++++ b/tinyinfer/src/layernorm.cpp
+@@ -20,7 +20,8 @@ bool layernorm_fp32(const float* x, float* y, std::size_t n,
+     }
+     const float var = static_cast<float>(sq / static_cast<double>(n));
+-    const float inv_std = 1.0f / std::sqrt(var + eps);
++    // BUG: eps dropped; divides by zero on constant input.
++    const float inv_std = 1.0f / std::sqrt(var);
+
+     for (std::size_t i = 0; i < n; ++i) {
+         float v = (x[i] - mean) * inv_std;

@@ -1,0 +1,18 @@
+diff --git a/tinyinfer/src/matmul.cpp b/tinyinfer/src/matmul.cpp
+index 1111111..4444444 100644
+--- a/tinyinfer/src/matmul.cpp
++++ b/tinyinfer/src/matmul.cpp
+@@ -11,11 +11,12 @@ bool matmul_fp32(const float* a, const float* b, float* c,
+
+     for (std::size_t i = 0; i < m; ++i) {
+         for (std::size_t j = 0; j < n; ++j) {
+-            float acc = 0.0f;
++            // BUG: accumulator not reset between output cells; reads stale c[].
++            float acc = c[i * n + j];
+             for (std::size_t p = 0; p < k; ++p) {
+                 acc += a[i * k + p] * b[p * n + j];
+             }
+             c[i * n + j] = acc;
+         }
+     }
+     return true;

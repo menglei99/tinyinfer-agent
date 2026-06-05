@@ -1,0 +1,14 @@
+diff --git a/tinyinfer/src/layernorm.cpp b/tinyinfer/src/layernorm.cpp
+index aaaaaaa..ddddddd 100644
+--- a/tinyinfer/src/layernorm.cpp
++++ b/tinyinfer/src/layernorm.cpp
+@@ -10,7 +10,8 @@ bool layernorm_fp32(const float* x, float* y, std::size_t n,
+
+     double sum = 0.0;
+     for (std::size_t i = 0; i < n; ++i) sum += x[i];
+-    const float mean = static_cast<float>(sum / static_cast<double>(n));
++    // BUG: integer division truncates the mean toward zero.
++    const float mean = static_cast<float>(static_cast<long long>(sum) / static_cast<long long>(n));
+
+     double sq = 0.0;
+     for (std::size_t i = 0; i < n; ++i) {

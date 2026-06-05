@@ -1,0 +1,15 @@
+diff --git a/tinyinfer/src/softmax.cpp b/tinyinfer/src/softmax.cpp
+index 6666666..8888888 100644
+--- a/tinyinfer/src/softmax.cpp
++++ b/tinyinfer/src/softmax.cpp
+@@ -18,8 +18,9 @@ bool softmax_fp32(const float* x, float* y, std::size_t n) {
+         s += y[i];
+     }
+
+-    const float inv = (s > 0.0f) ? (1.0f / s) : 0.0f;
++    // BUG: normalises by n instead of by sum(exp); breaks sum(y)==1 invariant.
++    const float inv = 1.0f / static_cast<float>(n);
+     for (std::size_t i = 0; i < n; ++i) {
+         y[i] *= inv;
+     }
+     return true;

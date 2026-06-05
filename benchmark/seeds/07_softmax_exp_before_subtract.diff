@@ -1,0 +1,14 @@
+diff --git a/tinyinfer/src/softmax.cpp b/tinyinfer/src/softmax.cpp
+index 6666666..9999999 100644
+--- a/tinyinfer/src/softmax.cpp
++++ b/tinyinfer/src/softmax.cpp
+@@ -13,9 +13,10 @@ bool softmax_fp32(const float* x, float* y, std::size_t n) {
+     }
+
+     float s = 0.0f;
+     for (std::size_t i = 0; i < n; ++i) {
+-        y[i] = std::exp(x[i] - m);
++        // BUG: exp computed before the max subtraction; overflows on big logits.
++        y[i] = std::exp(x[i]) - std::exp(m);
+         s += y[i];
+     }

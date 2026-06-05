@@ -1,0 +1,13 @@
+diff --git a/tinyinfer/src/matmul.cpp b/tinyinfer/src/matmul.cpp
+index 1111111..3333333 100644
+--- a/tinyinfer/src/matmul.cpp
++++ b/tinyinfer/src/matmul.cpp
+@@ -13,7 +13,7 @@ bool matmul_fp32(const float* a, const float* b, float* c,
+     for (std::size_t i = 0; i < m; ++i) {
+         for (std::size_t j = 0; j < n; ++j) {
+             float acc = 0.0f;
+             for (std::size_t p = 0; p < k; ++p) {
+-                acc += a[i * k + p] * b[p * n + j];
++                acc += a[i * k + p] * b[j * n + p];
+             }
+             c[i * n + j] = acc;

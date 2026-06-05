@@ -1,0 +1,12 @@
+diff --git a/tinyinfer/src/layernorm.cpp b/tinyinfer/src/layernorm.cpp
+index aaaaaaa..ccccccc 100644
+--- a/tinyinfer/src/layernorm.cpp
++++ b/tinyinfer/src/layernorm.cpp
+@@ -16,7 +16,8 @@ bool layernorm_fp32(const float* x, float* y, std::size_t n,
+         const double d = static_cast<double>(x[i]) - mean;
+         sq += d * d;
+     }
+-    const float var = static_cast<float>(sq / static_cast<double>(n));
++    // BUG: Bessel's (n-1) divisor; layernorm must use the n divisor.
++    const float var = static_cast<float>(sq / static_cast<double>(n - 1));
+     const float inv_std = 1.0f / std::sqrt(var + eps);
