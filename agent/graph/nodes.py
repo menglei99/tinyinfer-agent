@@ -111,6 +111,47 @@ def route_skill_node(state: AgentState) -> dict[str, Any]:
     return {"selected_skills": _detect_skills_from_diff(diff)}
 
 
+# ---------- retrieve_context ----------
+
+
+def retrieve_context_node(state: AgentState, retriever=None) -> dict[str, Any]:
+    """Pull a few relevant corpus docs to ground the rest of the pipeline.
+
+    The retriever is supplied by the graph builder via partial(); it can be
+    None (RAG disabled or build failed) — in which case we return an empty list
+    and downstream nodes degrade gracefully.
+
+    The query is built from changed_ops names and summaries — small, focused,
+    and cheap to embed.
+    """
+    if retriever is None:
+        return {"retrieved_docs": []}
+
+    ops = state.get("changed_ops") or []
+    if not ops:
+        return {"retrieved_docs": []}
+
+    # Build one query string per pipeline run. The op summary is short ("modification
+    # detected by static diff parse") so we mainly rely on the op name and the
+    # diff body's first 400 characters as a topical hint.
+    parts: list[str] = []
+    for op in ops:
+        parts.append(op.name)
+        if op.summary:
+            parts.append(op.summary)
+    diff = state.get("diff", "") or ""
+    if diff:
+        parts.append(diff[:400])
+    query = " ".join(parts)
+
+    try:
+        hits = retriever.retrieve(query, top_k=5)
+    except Exception as exc:  # never fail the pipeline because of RAG
+        return {"retrieved_docs": [], "error": f"retrieve_context: {exc}"}
+
+    return {"retrieved_docs": [h.to_dict() for h in hits]}
+
+
 # ---------- generate_tests ----------
 
 
@@ -118,6 +159,7 @@ def generate_tests_node(state: AgentState, llm: LLMClient | None = None) -> dict
     changed_ops = state.get("changed_ops", []) or []
     selected = state.get("selected_skills", []) or []
     existing = state.get("generated_tests", []) or []
+    lessons = state.get("reflexion_lessons") or []
 
     # Dedup against earlier critic-loop iterations: keep only test names we
     # haven't already produced for the same op. Without this the
@@ -127,7 +169,7 @@ def generate_tests_node(state: AgentState, llm: LLMClient | None = None) -> dict
     new_tests: list = []
     for kind in selected:
         try:
-            skill = get_skill(kind, llm=llm)
+            skill = get_skill(kind, llm=llm, lessons=lessons)
         except NotImplementedError:
             continue
         for op in changed_ops:
@@ -154,29 +196,65 @@ Respond ONLY with JSON: {"passed": bool, "missing_dimensions": [str,...], "feedb
 def critic_node(state: AgentState, llm: LLMClient | None = None) -> dict[str, Any]:
     tests = state.get("generated_tests", []) or []
     iterations = int(state.get("critic_iterations") or 0) + 1
+    docs = state.get("retrieved_docs") or []
+
+    def _result(verdict: CriticVerdict) -> dict[str, Any]:
+        """Pack the critic update, including a Reflexion lesson when the
+        verdict failed (so the next generate_tests iteration knows what to
+        target). The lesson reducer concats across iterations.
+        """
+        out: dict[str, Any] = {
+            "critic_verdict": verdict,
+            "critic_iterations": iterations,
+        }
+        if not verdict.passed and _reflexion_enabled():
+            lesson = _build_reflexion_lesson(iterations, verdict)
+            if lesson:
+                out["reflexion_lessons"] = [lesson]
+        return out
 
     if not tests:
         verdict = CriticVerdict(
             passed=False,
             missing_dimensions=["no_tests_generated"],
             feedback="Generation produced zero tests.",
+            coverage_report=_build_coverage_report(tests, [], docs, structural_pass=False),
         )
-        return {"critic_verdict": verdict, "critic_iterations": iterations}
+        return _result(verdict)
 
     # Deterministic structural check first — cheap and reliable.
     structural = _structural_critic(tests)
+    base_report = _build_coverage_report(
+        tests, structural.missing_dimensions, docs, structural_pass=structural.passed
+    )
+
     if not structural.passed:
-        return {"critic_verdict": structural, "critic_iterations": iterations}
+        structural.coverage_report = base_report
+        return _result(structural)
 
     # Optional LLM critic on top of structural pass.
     if llm is None:
-        return {"critic_verdict": structural, "critic_iterations": iterations}
+        structural.coverage_report = base_report
+        return _result(structural)
 
     try:
         summary = "\n".join(f"- {t.op_name}::{t.test_name} ({t.rationale})" for t in tests)
+        # Inject retrieved corpus snippets as grounding for the critic. We cap
+        # at top-3 to keep prompt size in check; the retriever already returned
+        # them ranked.
+        rag_block = ""
+        if docs:
+            top = docs[:3]
+            lines = []
+            for d in top:
+                doc_id = d.get("doc", {}).get("doc_id", "")
+                text = d.get("doc", {}).get("text", "")
+                lines.append(f"- [{doc_id}] {text}")
+            rag_block = "\nRelevant context from corpus:\n" + "\n".join(lines) + "\n"
+
         resp = llm.complete(
             system=_CRITIC_SYSTEM,
-            user=f"Proposed tests:\n{summary}\n\nReview them.",
+            user=f"{rag_block}Proposed tests:\n{summary}\n\nReview them.",
             json_mode=True,
         )
         payload = json.loads(resp.text)
@@ -184,11 +262,79 @@ def critic_node(state: AgentState, llm: LLMClient | None = None) -> dict[str, An
             passed=bool(payload.get("passed", True)),
             missing_dimensions=list(payload.get("missing_dimensions", [])),
             feedback=str(payload.get("feedback", "")),
+            coverage_report={
+                **base_report,
+                "llm_passed": bool(payload.get("passed", True)),
+                "llm_missing": list(payload.get("missing_dimensions", [])),
+            },
         )
     except (json.JSONDecodeError, KeyError, TypeError):
         verdict = structural
+        verdict.coverage_report = base_report
 
-    return {"critic_verdict": verdict, "critic_iterations": iterations}
+    return _result(verdict)
+
+
+def _reflexion_enabled() -> bool:
+    """True unless REFLEXION env var is explicitly off (default: on)."""
+    v = (os.getenv("REFLEXION", "on") or "on").lower().strip()
+    return v not in ("0", "false", "off", "no")
+
+
+def _build_reflexion_lesson(iteration: int, verdict: CriticVerdict) -> str:
+    """Human-readable lesson string for the next generator pass.
+
+    The generator prepends these to its planner prompt. Keep the format
+    consistent — the LLM does much better with a structured "Lesson #N:"
+    prefix than with raw missing-dimension lists.
+    """
+    parts: list[str] = [f"Lesson #{iteration}:"]
+    missing = [m for m in (verdict.missing_dimensions or []) if m]
+    if missing:
+        parts.append("the previous test set was missing " + ", ".join(missing) + ".")
+    if verdict.feedback:
+        parts.append("Feedback: " + verdict.feedback.strip())
+    if len(parts) == 1:
+        # Don't emit empty lessons.
+        return ""
+    return " ".join(parts)
+
+
+def _build_coverage_report(
+    tests: list,
+    missing: list[str],
+    docs: list[dict],
+    *,
+    structural_pass: bool,
+) -> dict[str, Any]:
+    """Open-schema dict for the critic verdict's coverage_report field.
+
+    Captures: how many (op, skill) groups were scored, total / missing
+    dimensions, how many corpus docs were used to ground the LLM critic, and
+    the per-skill miss list — useful for the report renderer + downstream
+    metrics.
+    """
+    groups: dict[tuple, list] = {}
+    for t in tests:
+        groups.setdefault((t.op_name, t.skill), []).append(t)
+
+    per_skill: dict[str, list[str]] = {}
+    for entry in missing:
+        # entry shape from _structural_critic: "op_name/skill_value:dim_name"
+        parts = entry.split(":", 1)
+        if len(parts) == 2:
+            per_skill.setdefault(parts[0], []).append(parts[1])
+        else:
+            per_skill.setdefault("_other", []).append(entry)
+
+    return {
+        "structural_pass": bool(structural_pass),
+        "groups_checked": len(groups),
+        "total_tests": len(tests),
+        "missing_count": len(missing),
+        "context_docs_used": len(docs),
+        "per_skill": per_skill,
+    }
 
 
 def _structural_critic(tests: list) -> CriticVerdict:
@@ -446,6 +592,25 @@ def write_report_node(state: AgentState) -> dict[str, Any]:
             lines.append(f"- missing: {', '.join(critic.missing_dimensions)}")
         if critic.feedback:
             lines.append(f"- feedback: {critic.feedback}")
+        cov = critic.coverage_report or {}
+        if cov:
+            lines.append(
+                f"- coverage: {cov.get('total_tests', 0)} tests across "
+                f"{cov.get('groups_checked', 0)} (op,skill) groups; "
+                f"{cov.get('missing_count', 0)} missing dimension(s); "
+                f"context docs used: {cov.get('context_docs_used', 0)}"
+            )
+        lines.append("")
+
+    docs = state.get("retrieved_docs") or []
+    if docs:
+        lines.append(f"## RAG context ({len(docs)} doc(s))\n")
+        for d in docs[:5]:
+            doc = d.get("doc", {})
+            score = d.get("score", 0.0)
+            text = doc.get("text", "")
+            short = text if len(text) <= 160 else text[:157] + "..."
+            lines.append(f"- `{doc.get('doc_id','')}` (score={score:.3f}) — {short}")
         lines.append("")
 
     installed = state.get("installed_test_paths") or []

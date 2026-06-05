@@ -1,5 +1,5 @@
 {
-  "_comment": "Add this entry to your claude_desktop_config.json under mcpServers. Replace REPO_DIR with the absolute path to this clone (e.g. D:/tinyinfer-agent on Windows, or /Users/you/tinyinfer-agent on macOS).",
+  "_comment": "把这一段加到你的 claude_desktop_config.json 的 mcpServers 下。把 REPO_DIR 替换成本仓库 clone 的绝对路径（Windows 上比如 D:/tinyinfer-agent，macOS 上比如 /Users/you/tinyinfer-agent）。",
   "mcpServers": {
     "tinyinfer-toolchain": {
       "command": "REPO_DIR/.venv/Scripts/python.exe",

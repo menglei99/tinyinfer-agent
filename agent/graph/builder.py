@@ -44,11 +44,12 @@ def _execute_router(state: AgentState) -> str:
     return "execute" if state.get("execute_requested") else "skip"
 
 
-def build_graph(llm: Optional[LLMClient] = None):
+def build_graph(llm: Optional[LLMClient] = None, retriever=None):
     sg: StateGraph = StateGraph(AgentState)
 
     sg.add_node("parse_diff", partial(nodes.parse_diff_node, llm=llm))
     sg.add_node("route_skill", nodes.route_skill_node)
+    sg.add_node("retrieve_context", partial(nodes.retrieve_context_node, retriever=retriever))
     sg.add_node("generate_tests", partial(nodes.generate_tests_node, llm=llm))
     sg.add_node("critic", partial(nodes.critic_node, llm=llm))
     sg.add_node("install_tests", nodes.install_tests_node)
@@ -57,7 +58,8 @@ def build_graph(llm: Optional[LLMClient] = None):
 
     sg.add_edge(START, "parse_diff")
     sg.add_edge("parse_diff", "route_skill")
-    sg.add_edge("route_skill", "generate_tests")
+    sg.add_edge("route_skill", "retrieve_context")
+    sg.add_edge("retrieve_context", "generate_tests")
     sg.add_edge("generate_tests", "critic")
     sg.add_conditional_edges(
         "critic",

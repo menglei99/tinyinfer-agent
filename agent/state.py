@@ -7,7 +7,7 @@ Keep it small, serializable, and free of runtime objects (clients, sockets).
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
@@ -43,6 +43,10 @@ class CriticVerdict(BaseModel):
     passed: bool
     missing_dimensions: list[str] = Field(default_factory=list)
     feedback: str = ""
+    coverage_report: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Open-schema dict capturing per-skill / per-dimension critic detail.",
+    )
 
 
 class ExecutionResult(BaseModel):
@@ -74,12 +78,19 @@ class AgentState(TypedDict, total=False):
     # route_skill
     selected_skills: list[SkillKind]
 
+    # retrieve_context (RAG hits — list of plain dicts to keep state JSON-safe)
+    retrieved_docs: list[dict]
+
     # generate_tests
     generated_tests: Annotated[list[TestCase], _merge_list]
 
     # critic
     critic_verdict: Optional[CriticVerdict]
     critic_iterations: int
+
+    # reflexion (one human-readable lesson per failed critic iteration; the
+    # generator reads these to bias the next round's shape proposals).
+    reflexion_lessons: Annotated[list[str], _merge_list]
 
     # install_tests (copy generated cpp into tinyinfer/tests/)
     installed_test_paths: Annotated[list[str], _merge_list]

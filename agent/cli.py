@@ -50,6 +50,10 @@ def analyze(
         False, "--execute/--no-execute",
         help="Drive cmake configure/build/ctest via the MCP toolchain after generation",
     ),
+    rag: bool = typer.Option(
+        True, "--rag/--no-rag",
+        help="Build a hybrid retriever and ground critic/generator on retrieved corpus snippets.",
+    ),
 ):
     """Analyse a git diff and emit regression test C++ source."""
 
@@ -60,14 +64,32 @@ def analyze(
     provider = os.getenv("LLM_PROVIDER", "mock")
     console.print(Panel.fit(f"LLM provider: [bold]{provider}[/bold]", title="setup"))
 
+    from agent.tracing.langsmith import status_line as _ls_status
+
+    console.print(f"LangSmith: [dim]{_ls_status()}[/dim]")
+
+    retriever = None
+    if rag:
+        try:
+            # Lazy import so a base install (no [rag] extra) doesn't crash at module load.
+            from agent.rag import build_default_retriever
+            from agent.llm import get_embedding_client
+
+            retriever = build_default_retriever(embedder=get_embedding_client())
+            console.print(
+                f"[green]OK[/green] retriever built ({retriever.corpus_size} docs)"
+            )
+        except ImportError as exc:
+            console.print(f"[yellow]RAG disabled: {exc}[/yellow]")
+
     diff_text = diff.read_text(encoding="utf-8")
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     with TraceWriter(trace) as tw:
-        tw.write("run.start", diff_path=str(diff), provider=provider, execute=execute)
+        tw.write("run.start", diff_path=str(diff), provider=provider, execute=execute, rag=bool(retriever))
 
-        graph = build_graph(llm=llm)
+        graph = build_graph(llm=llm, retriever=retriever)
         initial: AgentState = {
             "diff": diff_text,
             "diff_path": str(diff),

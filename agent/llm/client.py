@@ -17,6 +17,26 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _maybe_wrap_for_langsmith(openai_client):
+    """Return the openai client wrapped for LangSmith span capture, or as-is.
+
+    Wraps only when both:
+      - the `langsmith` package is importable, AND
+      - `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` are set.
+    Failures here are silent — observability must never break the pipeline.
+    """
+    if not os.getenv("LANGSMITH_API_KEY"):
+        return openai_client
+    if os.getenv("LANGSMITH_TRACING", "").lower() not in ("1", "true", "yes"):
+        return openai_client
+    try:
+        from langsmith.wrappers import wrap_openai  # type: ignore
+
+        return wrap_openai(openai_client)
+    except Exception:
+        return openai_client
+
+
 @dataclass
 class LLMResponse:
     text: str
@@ -40,7 +60,12 @@ class OpenAICompatibleClient:
         kwargs = {"api_key": api_key}
         if base_url:
             kwargs["base_url"] = base_url
-        self._client = OpenAI(**kwargs)
+        client = OpenAI(**kwargs)
+        # If LangSmith is configured, wrap the client so chat completions appear
+        # as proper LLM spans (with prompt + response + token counts) in the
+        # LangSmith dashboard. No-op when langsmith isn't installed or the
+        # tracing env vars aren't set.
+        self._client = _maybe_wrap_for_langsmith(client)
         self._model = model
 
     def complete(self, system: str, user: str, *, json_mode: bool = False) -> LLMResponse:
@@ -54,9 +79,40 @@ class OpenAICompatibleClient:
         }
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
-        resp = self._client.chat.completions.create(**kwargs)
-        text = resp.choices[0].message.content or ""
-        return LLMResponse(text=text, raw=resp.model_dump() if hasattr(resp, "model_dump") else None)
+
+        # Retry transient connection errors. DashScope (and other endpoints)
+        # occasionally drop a connection mid-batch; without retry a single
+        # blip kills a 30-minute benchmark run.
+        import time
+
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                resp = self._client.chat.completions.create(**kwargs)
+                text = resp.choices[0].message.content or ""
+                return LLMResponse(
+                    text=text,
+                    raw=resp.model_dump() if hasattr(resp, "model_dump") else None,
+                )
+            except Exception as exc:
+                # Only retry on connection-flavoured errors; surface 4xx/auth
+                # immediately so misconfigurations don't quietly burn quota.
+                name = type(exc).__name__
+                if name not in (
+                    "APIConnectionError",
+                    "APITimeoutError",
+                    "ReadTimeout",
+                    "ConnectionError",
+                    "TimeoutError",
+                    "InternalServerError",
+                ):
+                    raise
+                last_exc = exc
+                if attempt == 2:
+                    break
+                time.sleep(1.5 * (attempt + 1))
+        assert last_exc is not None
+        raise last_exc
 
 
 class AnthropicClient:

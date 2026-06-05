@@ -30,7 +30,20 @@ dev = [
     "mypy>=1.8",
 ]
 anthropic = ["langchain-anthropic>=0.2.0"]
-rag = ["pymilvus>=2.4", "rank-bm25>=0.2.2"]
+# Default RAG stack: BM25 lexical + Chroma dense vector store. Chroma is
+# embedded (sqlite-backed) and installs cleanly on Windows without Docker.
+rag = [
+    "rank-bm25>=0.2.2",
+    "chromadb>=0.5",
+]
+# Optional: Qdrant local mode (also embedded, richer filter syntax).
+rag-qdrant = ["qdrant-client>=1.10"]
+# Optional: legacy Milvus stack (milvus-lite for embedded; pymilvus for server).
+rag-milvus = [
+    "pymilvus>=3.0",
+    "milvus-lite>=3.0",
+]
+ui = ["streamlit>=1.32"]
 
 [project.scripts]
 tinyinfer-agent = "agent.cli:app"
