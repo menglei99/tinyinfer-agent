@@ -62,7 +62,7 @@ TEST(SoftmaxGenerated, stability_large_values_overflow) {
     // numerical stability on large logits
     constexpr std::size_t rows = 1;
     constexpr std::size_t cols = 3;
-    std::vector<float> x = {1000f, 1001f, 1002f};
+    std::vector<float> x = {1000.0f, 1001.0f, 1002.0f};
     std::vector<float> expected = {0.09003057f, 0.2447285f, 0.6652409f};
     std::vector<float> y(rows * cols, 0.0f);
 
@@ -79,8 +79,8 @@ TEST(SoftmaxGenerated, stability_negative_inf_one_hot) {
     // near-one-hot logits stress the softmax tail
     constexpr std::size_t rows = 1;
     constexpr std::size_t cols = 4;
-    std::vector<float> x = {0f, 0f, 100f, 0f};
-    std::vector<float> expected = {3.783506e-44f, 3.783506e-44f, 1f, 3.783506e-44f};
+    std::vector<float> x = {0.0f, 0.0f, 100.0f, 0.0f};
+    std::vector<float> expected = {3.783506e-44f, 3.783506e-44f, 1.0f, 3.783506e-44f};
     std::vector<float> y(rows * cols, 0.0f);
 
     for (std::size_t r = 0; r < rows; ++r) {
