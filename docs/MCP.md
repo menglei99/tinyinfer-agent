@@ -1,8 +1,8 @@
-# MCP integration
+# MCP 集成
 
-`agent/mcp/server.py` exposes the local C++ toolchain as an MCP stdio server.
-That means any MCP-aware client can build and test `tinyinfer/` using the same
-portable tool API:
+`agent/mcp/server.py` 把本地 C++ 工具链暴露成一个 MCP stdio server。
+也就是说，任何 MCP-aware 的客户端都可以用同一套可移植的工具 API 来
+构建和测试 `tinyinfer/`：
 
 - `cmake_available`
 - `cmake_configure`
@@ -10,82 +10,82 @@ portable tool API:
 - `ctest_run`
 - `list_tests`
 
-## Why this matters
+## 为什么这件事重要
 
-This is one of the core engineering stories of the project.
-The same build/test functionality is now usable by:
+这是本项目核心的工程故事之一。
+同一套 build/test 能力现在可以被以下客户端复用：
 
-- this repository's own LangGraph agent
+- 本仓库自己的 LangGraph agent
 - Claude Desktop
 - Cursor
-- any future IDE or orchestrator that speaks MCP
+- 未来任何会说 MCP 的 IDE 或编排器
 
-That is much stronger than keeping these actions buried inside one Python app.
+这比把这些动作藏在一个 Python 应用内部要强得多。
 
-## Start the server manually
+## 手动起 server
 
 ```bash
 cd D:/tinyinfer-agent
 .venv/Scripts/python.exe -m agent.mcp.server
 ```
 
-Or via the CLI wrapper:
+或者用 CLI 包装：
 
 ```bash
 tinyinfer-agent mcp-server
 ```
 
-The server speaks JSON-RPC over stdio, so it should normally be launched by an
-MCP client rather than run interactively in a terminal.
+server 走 stdio 上的 JSON-RPC，所以正常情况下应该由 MCP 客户端拉起来，
+而不是在终端里交互式跑。
 
-## Configure Claude Desktop
+## 配置 Claude Desktop
 
-Use `mcp_config.json.example` as a template and copy the `tinyinfer-toolchain`
-entry into your `claude_desktop_config.json`.
+用 `mcp_config.json.example` 当模板，把 `tinyinfer-toolchain` 那段
+拷到你的 `claude_desktop_config.json` 里。
 
-Important fields:
+关键字段：
 
-- `command`: absolute path to this repo's virtualenv Python
-- `args`: `[-m, agent.mcp.server]`
-- `TINYINFER_PROJECT_DIR`: absolute path to `tinyinfer/`
-- `TINYINFER_BUILD_DIR`: absolute path to `tinyinfer/build/`
+- `command`：本仓库 venv 里 Python 的绝对路径
+- `args`：`[-m, agent.mcp.server]`
+- `TINYINFER_PROJECT_DIR`：`tinyinfer/` 的绝对路径
+- `TINYINFER_BUILD_DIR`：`tinyinfer/build/` 的绝对路径
 
-## Tool reference
+## 工具说明
 
 ### `cmake_available()`
-Returns whether `cmake` is installed on the host PATH.
-Use this first so the client can fail fast on machines without cmake.
+返回宿主机 PATH 上有没有 `cmake`。
+客户端先调用这个就能在没装 cmake 的机器上提前 fail。
 
 ### `cmake_configure(project_dir?, build_dir?)`
-Equivalent to:
+等价于：
 
 ```bash
 cmake -S <project_dir> -B <build_dir> -DCMAKE_BUILD_TYPE=Release
 ```
 
 ### `cmake_build(build_dir?, target?)`
-Equivalent to:
+等价于：
 
 ```bash
 cmake --build <build_dir> --config Release [--target <target>]
 ```
 
 ### `ctest_run(build_dir?, test_filter?)`
-Equivalent to:
+等价于：
 
 ```bash
 ctest --test-dir <build_dir> --output-on-failure [-R <regex>]
 ```
 
 ### `list_tests(build_dir?)`
-Runs `ctest -N` and returns the discovered test names.
-Useful after generated tests are written to disk.
+跑 `ctest -N` 然后返回发现的测试名列表。
+生成的测试落地之后调用它可以确认它们被 cmake 正确发现。
 
-## Current limitation
+## 当前限制
 
-The server can orchestrate build/test, but this host currently does **not**
-have `cmake` installed on PATH. So `cmake_available()` returns false until you
-install cmake locally.
+server 本身可以编排 build/test，但当前开发机 **没装** `cmake`。
+所以 `cmake_available()` 在本机会返回 false，
+`execute_tests_node` 走 SKIP 路径并把"未执行 + 原因"写到 report 里。
 
-Once cmake is installed, the same server will be able to configure, build, and
-run the generated GTest suites without any code changes.
+新机器装上 cmake 之后，同一份 server 代码不用改就能 configure、build、
+跑生成出来的 GTest 套件。

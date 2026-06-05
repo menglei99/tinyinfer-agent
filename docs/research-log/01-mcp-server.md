@@ -1,110 +1,100 @@
-# Devlog 01 — Wrapping the C++ toolchain in an MCP server
+# Devlog 01 —— 把 C++ 工具链包成一个 MCP server
 
-## Why now
+## 为什么现在做
 
-Week 1 left `agent/tools/cmake_driver.py` as a thin Python wrapper around
-`subprocess.run`. The Agent could call into it. But nothing else could.
+Week 1 留下的 `agent/tools/cmake_driver.py` 是包了一层
+`subprocess.run` 的 Python 函数。Agent 自己能调，**别人调不了**。
 
-That's the wrong shape for a project whose pitch is "production-grade AI
-application engineering". In a real org:
+对一个号称"production-grade AI 应用工程"的项目来说，这个形状不对。
+在真实组织里：
 
-- Engineers want to drive the same `cmake_configure / cmake_build / ctest_run`
-  from Claude Desktop or Cursor while they're code-reviewing.
-- The Agent should call these tools through a formal protocol so we can later
-  swap implementations (local subprocess → remote build farm) without touching
-  agent code.
-- We don't want to invent yet another tool format on top of LangChain's. MCP
-  is the standard.
+- 工程师在 code review 的时候，想直接在 Claude Desktop 或 Cursor 里
+  调 `cmake_configure / cmake_build / ctest_run`。
+- Agent 调这些工具应该走正式协议，将来可以把实现整组替换
+  （本地 subprocess → 远端 build farm）而不动 agent 代码。
+- 不想在 LangChain 自己的工具格式之上又发明一个。MCP 就是那个标准。
 
-So Week 2 starts by lifting the C++ toolchain into an MCP stdio server.
+所以 Week 2 第一件事就是把 C++ 工具链提到 MCP stdio server 里。
 
-## What I built
+## 做了什么
 
-`agent/mcp/server.py` exposes 5 tools via `FastMCP`:
+`agent/mcp/server.py` 通过 `FastMCP` 暴露 5 个工具：
 
-| Tool | Wraps |
-|------|-------|
+| 工具 | 包的命令 |
+|------|---------|
 | `cmake_available` | `shutil.which('cmake')` |
 | `cmake_configure` | `cmake -S … -B … -DCMAKE_BUILD_TYPE=Release` |
 | `cmake_build`     | `cmake --build … [--target …]` |
 | `ctest_run`       | `ctest --test-dir … -R …` |
-| `list_tests`      | `ctest -N` + parse |
+| `list_tests`      | `ctest -N` + 解析 |
 
-Three things I deliberately did:
+刻意做的三件事：
 
-1. **Defaults via env vars** (`TINYINFER_PROJECT_DIR`, `TINYINFER_BUILD_DIR`)
-   so the Claude Desktop config can pin them once and the LLM can call tools
-   with no arguments.
-2. **Tail-truncate `stdout` / `stderr`** in the tool result. Build logs can
-   blow MCP message limits; a 4 KB tail is enough to debug.
-3. **Same underlying primitive as the agent** (`agent.tools.cmake_driver`).
-   The Python agent and the MCP-launched Claude Desktop share one
-   implementation — no drift.
+1. **默认值走环境变量**（`TINYINFER_PROJECT_DIR`、`TINYINFER_BUILD_DIR`），
+   这样 Claude Desktop 的配置文件只需要钉一次，LLM 调工具的时候
+   可以不传参。
+2. **截尾 stdout / stderr**。Build 日志能撑爆 MCP message size limit；
+   4 KB 尾部足够 debug。
+3. **跟 agent 共用同一份底层实现**（`agent.tools.cmake_driver`）。
+   Python agent 和 MCP 拉起来的 Claude Desktop 共享一套实现 —— 没有漂移。
 
 ## Smoke test
 
-I exercised the server two ways:
+我从两个角度验过 server：
 
-1. **In-process** (via pytest): import the FastMCP instance, call
-   `await mcp.list_tools()`, and call individual tool functions directly. This
-   gives high coverage without the cost of spawning subprocesses on Windows
-   CI.
-2. **Real stdio handshake**: spawn `python -m agent.mcp.server` as a subprocess
-   from a Python MCP client, run `initialize` → `list_tools` → `call_tool`.
-   This proves the JSON-RPC layer works end-to-end.
+1. **同进程内**（pytest 走）：import `FastMCP` 实例，`await mcp.list_tools()`，
+   直接调每个工具函数。覆盖率高、不用在 Windows CI 上 spawn 子进程。
+2. **真实 stdio 握手**：从一个 Python MCP client spawn
+   `python -m agent.mcp.server` 子进程，跑 `initialize` → `list_tools` → `call_tool`。
+   证明 JSON-RPC 这层端到端 work。
 
-Both passed.
+两个都过。
 
-## Surprises / gotchas
+## 踩到的坑
 
-- **`mcp.tool()` doesn't wrap the function** in this version of the SDK.
-  My first instinct (`cmake_available.fn()`) was wrong — the decorated
-  callable is the same object as the original. The test now uses the
-  fallback path: just call it like a normal function.
-- **`agent/mcp/__init__.py` had `from .server import main`** at first.
-  Then `python -m agent.mcp.server` would emit a `RuntimeWarning` because
-  `agent.mcp.server` was already in `sys.modules` before the `-m` runner
-  touched it. Removed the import; left a docstring instead.
-- **FastMCP logs to stderr by default** (good — stdout is reserved for
-  protocol). I left default logging on; the messages are quiet and tagged
-  with the request type.
+- **`mcp.tool()` 在当前 SDK 里不 wrap 函数。** 我的第一反应
+  （`cmake_available.fn()`）是错的 —— 被装饰的 callable 跟原函数是
+  同一个对象。测试现在走的是回退路径：当普通函数调就行。
+- **`agent/mcp/__init__.py` 最初有 `from .server import main`。** 然后
+  `python -m agent.mcp.server` 会报 `RuntimeWarning`，因为 `agent.mcp.server`
+  在 `-m` runner 启动之前就已经在 `sys.modules` 里了。删了那个 import，
+  留个 docstring 就行。
+- **FastMCP 默认日志写 stderr**（对的 —— stdout 留给协议）。我没关默认日志，
+  消息很安静，按请求类型 tag。
 
-## What this gives the project
+## 对项目的价值
 
-For the agent loop:
-- A clean way to gate "execute the generated tests" behind a protocol.
-  Future work: an `execute_tests_node` that calls these MCP tools and writes
-  `ExecutionResult` records into `AgentState`.
+对 agent 主循环：
+- 有了一个干净的方式把"执行生成的测试"用协议门控起来。
+  后续：写一个 `execute_tests_node` 调这些 MCP 工具，把 `ExecutionResult`
+  写回 `AgentState`。
 
-For the resume / interview story:
-- "I wrote a custom MCP server that wraps the C++ toolchain. Now the same
-  cmake / ctest tools can be driven by my Agent, by Claude Desktop, or by
-  any future MCP-aware IDE." This is the **portability story** that I can't
-  tell with a hand-rolled JSON-RPC of my own.
+对简历 / 面试故事：
+- "我写了一个自定义 MCP server，把 C++ 工具链包了起来。现在同一套
+  cmake / ctest 工具可以被我的 Agent、Claude Desktop、或者任何未来的
+  MCP-aware IDE 驱动。" 这是**可移植性故事**，自己手写 JSON-RPC 是讲不出来的。
 
-For Week 3:
-- Same shape will be reused for a `tinyinfer-knowledge` MCP server that
-  exposes the operator-doc retriever as MCP tools. RAG without a custom
-  protocol.
+对 Week 3：
+- 同样的形状会复用到一个 `tinyinfer-knowledge` MCP server 上，把算子文档
+  检索器暴露成 MCP 工具。RAG 不用自定义协议。
 
-## Open questions / TODO
+## 待办 / 未决
 
-- Should the agent's own execute path go through the MCP client too, or
-  keep using `cmake_driver` directly? Going through MCP is purer but adds
-  a stdio subprocess hop on every run. I'll measure latency before deciding.
-- `list_tests` parses `ctest -N` output by string matching. Brittle if ctest
-  output changes between versions. Replace with `ctest -N --json` when
-  cmake ≥ 3.21 is the floor.
-- No streaming yet — `cmake_build` of a real project takes minutes. MCP
-  supports incremental progress notifications; worth wiring up later.
+- agent 自己的执行路径要不要也走 MCP client？还是继续直接调
+  `cmake_driver`？走 MCP 更纯，但每次跑都加一个 stdio 子进程 hop。
+  先量延迟再决定。
+- `list_tests` 现在按字符串匹配解析 `ctest -N` 输出。脆。
+  以后 ctest 输出格式一变就崩。等 cmake ≥ 3.21 是地板了换成 `ctest -N --json`。
+- 没做流式 —— 真项目 `cmake_build` 要几分钟。MCP 支持增量进度通知，
+  后面加上。
 
-## Status
+## 状态
 
-- [x] MCP server in `agent/mcp/server.py`
-- [x] CLI subcommand `tinyinfer-agent mcp-server`
-- [x] `mcp_config.json.example` for Claude Desktop registration
-- [x] `docs/MCP.md` with quickstart and tool reference
-- [x] Smoke test in `tests/test_mcp_server.py`
-- [x] Real stdio handshake verified
-- [ ] (next) Wire `execute_tests_node` into the graph so MCP execution is
-      a normal pipeline step, not a separate CLI command.
+- [x] MCP server 在 `agent/mcp/server.py`
+- [x] CLI 子命令 `tinyinfer-agent mcp-server`
+- [x] `mcp_config.json.example` 给 Claude Desktop 注册用
+- [x] `docs/MCP.md` 含快速上手和工具参考
+- [x] `tests/test_mcp_server.py` 里的 smoke test
+- [x] 真实 stdio 握手验过
+- [ ]（下一步）把 `execute_tests_node` 接进 graph，让 MCP 执行成为
+       流水线里的一个普通节点，不是单独的 CLI 命令。

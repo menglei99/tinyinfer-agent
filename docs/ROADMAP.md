@@ -1,69 +1,71 @@
 # Roadmap
 
-Target: 4-6 week solo project, presentable for AI 应用开发 interviews.
+目标：一个 4-6 周的个人项目，能拿来面试讲 AI 应用开发。
 
-## Week 1 — MVP foundation ✅ (current state)
+## Week 1 —— MVP 地基 ✅
 
-- [x] Project scaffolding, pyproject, gitignore
-- [x] LangGraph StateGraph: parse_diff → route → generate → critic → report
-- [x] One skill (numerical) end-to-end with numpy oracle
-- [x] One operator (`matmul_fp32`) in C++ with baseline GTest
-- [x] LLM abstraction with mock provider (key-less demo works)
+- [x] 项目脚手架、pyproject、gitignore
+- [x] LangGraph StateGraph：parse_diff → route → generate → critic → report
+- [x] 一个 skill（numerical）端到端打通，配 numpy oracle
+- [x] 一个算子（`matmul_fp32`）C++ 实现 + baseline GTest
+- [x] LLM 抽象 + mock provider（无 key demo 可跑）
 - [x] JSONL trace writer
-- [x] CLI: `analyze` and `build-and-test`
-- [x] Sample diffs + Python smoke tests
-- [x] README, ARCHITECTURE, ROADMAP, devlog 00
+- [x] CLI：`analyze` 和 `build-and-test`
+- [x] 示例 diff + Python smoke test
+- [x] README、ARCHITECTURE、ROADMAP、devlog 00
 
-**Demo command (works today, no API key):**
+**Demo 命令（不需要 API key）：**
 ```bash
 python -m agent.cli analyze --diff demo/diffs/sample_matmul.diff --mock
 ```
 
-## Week 2 — Multi-skill + MCP
+## Week 2 —— 多 skill + MCP
 
-- [x] Implement `softmax_fp32` C++ operator (with hand-written baseline)
-- [x] Add a third operator (`layernorm_fp32`)
-- [x] Performance skill: emit chrono-based regression budgets as GTest cases
-- [x] Memory skill: emit guard-band stress tests (ASan-compatible)
-- [x] Diff-content-aware routing (allocator change → memory, hot path change → perf)
-- [x] **Custom MCP server** (`agent/mcp/server.py`)
-  - tools: `cmake_configure`, `cmake_build`, `ctest_run`, `compile_only`
-  - integrate via `langchain_mcp_adapters` or stdio loop
-- [ ] Hand-written 10-test fault-injection benchmark; baseline accuracy
+- [x] 实现 `softmax_fp32` C++ 算子（带手写 baseline）
+- [x] 加第三个算子（`layernorm_fp32`）
+- [x] Performance skill：基于 chrono 的 regression budget GTest 用例
+- [x] Memory skill：guard-band 压力测试（与 ASan 兼容）
+- [x] diff 内容感知的路由（allocator 改动 → memory，hot path 改动 → perf）
+- [x] **自定义 MCP server**（`agent/mcp/server.py`）
+  - tools：`cmake_configure`、`cmake_build`、`ctest_run`、`compile_only`
+  - 通过 `langchain_mcp_adapters` 或 stdio loop 接入
+- [x] 手写的 10 条 fault-injection benchmark + 基线准确率
 
-## Week 3 — RAG + advanced critic
+## Week 3 —— RAG + 高级 critic
 
-- [ ] Hybrid retriever (BM25 + embedding + RRF) over:
-  - ONNX op spec
-  - tinyinfer source comments
-  - past "fault-injection" rationales
-- [ ] Optional Milvus backend (extra: `pip install -e ".[rag]"`)
-- [ ] LLM critic with retrieved context, multi-dimensional coverage report
-- [ ] Self-Consistency: N-way generation with majority shape selection
-- [ ] Devlog 02 (RAG) and devlog 03 (critic + self-consistency)
+- [x] Hybrid retriever（BM25 + embedding + RRF），corpus 包含：
+  - 手写的 ONNX 算子语义
+  - tinyinfer 源码注释
+  - 历史 fault-injection 的归纳总结
+- [x] 可选的 Milvus 后端（extra：`pip install -e ".[rag-milvus]"`） —— 默认实际用 Chroma
+- [x] 带 retrieved context 的 LLM critic，多维 coverage report
+- [x] Self-Consistency：N 路生成 + 多数投票（环境变量控制）
+- [x] Devlog 02（RAG）和 devlog 03（critic + self-consistency）
 
-## Week 4 — Eval, UI, CI, release
+## Week 4 —— Eval、UI、CI、发布
 
-- [ ] Expand fault-injection benchmark to 30 commits
-- [ ] Run ablation: with/without critic, with/without RAG
-- [ ] Streamlit UI: diff input + test preview + critic feedback
-- [ ] `langsmith` integration (dual-track observability)
-- [ ] GitHub Actions: lint + mypy + pytest + benchmark on PR
-- [ ] Docker compose: agent + Milvus
-- [ ] 2-minute demo video; tech blog post (Chinese + English)
-- [ ] Devlog 04 (final ablation + reflection)
+- [ ] fault-injection benchmark 扩展到 30 个 commit
+- [x] 跑 ablation：有/无 critic、有/无 RAG（已在本机用 Qwen 完成 5 种配置对比，见 devlog 05）
+- [x] Streamlit UI：diff 输入 + 测试预览 + critic 反馈
+- [x] `langsmith` 集成（环境变量即开即用 + `wrap_openai` 把 LLM 调用变成 LLM span）
+- [ ] GitHub Actions：lint + mypy + pytest *（应用户要求暂时不做）*
+- [x] Docker compose：Qdrant + 可选 Milvus profile *（已写，未在本机起服务）*
+- [ ] 2 分钟 demo 视频；技术博客（中文）
+- [x] Devlog 04（eval + UI）
 
-## Stretch (Week 5-6)
+## Stretch（Week 5-6）
 
-- [ ] Real reference oracle via ONNX Runtime for fused / quantized ops
-- [ ] Cross-hardware: emit ARM cross-compile test invocation
-- [ ] Reflexion loop: failed test runs feed back as lessons
-- [ ] Real open-source target (NCNN or mlx): demo on a real PR
-- [ ] Resume bullet + interview talking-points doc
+- [ ] 通过 ONNX Runtime 给 fused / quantized 算子做参考 oracle
+- [ ] 跨硬件：触发 ARM 交叉编译的测试调用
+- [x] **Reflexion loop**：critic FAIL 的反馈喂回 generator 作为 lesson —— 已实现，
+       通过 `REFLEXION` 环境变量门控；ablation devlog 06 表明在当前 benchmark
+       上没显著提升（scope 问题 + critic 漂移），保留作进一步探索。
+- [ ] 真实开源项目目标（NCNN 或 mlx）：在真实 PR 上 demo
+- [ ] 简历 bullet + 面试讲稿
 
-## Deliberately out of scope
+## 故意不做的事
 
-- General code generation (this is a regression-test agent, not a coding agent)
-- Web frontend beyond Streamlit
-- Multi-user / auth / cloud
-- Real-time streaming UX (defer until LangGraph events are plumbed properly)
+- 通用代码生成（这是回归测试 agent，不是 coding agent）
+- Streamlit 以外的 Web 前端
+- 多用户 / 鉴权 / 云
+- 实时流式 UX（等 LangGraph events 接通了再说）
