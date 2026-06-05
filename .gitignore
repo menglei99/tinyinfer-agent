@@ -44,6 +44,10 @@ traces/
 runs/
 *.jsonl.tmp
 
+# RAG runtime caches
+.chroma_db/
+.embedding_cache/
+
 # Demo outputs (keep dir, ignore generated content)
 demo/generated_tests/*.cpp
 demo/generated_tests/*.json
