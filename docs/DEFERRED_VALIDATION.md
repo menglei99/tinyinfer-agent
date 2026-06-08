@@ -7,9 +7,13 @@
 
 **代码路径**：`agent.graph.nodes.execute_tests_node` → `agent.mcp.client.call_tools` → `agent.mcp.server` → `cmake configure / build`、`ctest`。
 
-**当前状态**：返回一个 SKIPPED 的 `ExecutionResult`，因为本机 PATH 上没 `cmake`。
+**当前状态**：本机已经能跑通 —— 走的是 **docker 编译器后端**（见
+[`docs/DOCKER_BUILDER.md`](DOCKER_BUILDER.md)）。本机没装 MSVC / g++ / clang，
+但有 docker，所以 `agent/tools/cmake_driver.py` 在 `TINYINFER_DOCKER_IMAGE` 设上
+时把命令转发到一次性容器里。MCP server / LangGraph 节点零修改。
 
-**验证方法**：装好 cmake + 一个 C++17 编译器（MSVC、g++ 或 clang++），然后：
+**新机器（原生 MSVC / g++）仍未验证**，那个路径走的是同一份 `cmake_driver`
+但不经过 docker，理论上更简单。验证方法：
 
 ```bash
 python -m agent.cli analyze --diff demo/diffs/sample_matmul.diff --mock --execute

@@ -30,6 +30,7 @@ def _matmul_full_coverage_tests() -> list[TestCase]:
         TestCase(op_name="matmul_fp32", skill=SkillKind.NUMERICAL, test_name="stability_large_magnitude", cpp_source="x"),
         TestCase(op_name="matmul_fp32", skill=SkillKind.NUMERICAL, test_name="outer_product_k1", cpp_source="x"),
         TestCase(op_name="matmul_fp32", skill=SkillKind.NUMERICAL, test_name="aligned_16x32_32x64", cpp_source="x"),
+        TestCase(op_name="matmul_fp32", skill=SkillKind.NUMERICAL, test_name="prefilled_output_buffer_2x2", cpp_source="x"),
     ]
 
 
@@ -66,7 +67,7 @@ def test_coverage_report_populated_on_success():
     )
     cov = out["critic_verdict"].coverage_report
     assert cov["structural_pass"] is True
-    assert cov["total_tests"] == 6
+    assert cov["total_tests"] == 7
     assert cov["groups_checked"] == 1
     assert cov["missing_count"] == 0
     assert cov["context_docs_used"] == 0

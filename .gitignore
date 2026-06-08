@@ -24,6 +24,7 @@ htmlcov/
 
 # C++ build
 tinyinfer/build/
+tinyinfer/build-docker/
 tinyinfer/cmake-build-*/
 *.o
 *.a

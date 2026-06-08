@@ -186,6 +186,25 @@ def default_shape_cases(op_name: str, *, rng: np.random.Generator | None = None)
                 },
                 rationale="hardware-aligned tile sizes for SIMD/vectorised kernels",
             ),
+            # ---- API-contract case: caller-owned c[] is preloaded with
+            # non-zero values. A correct implementation MUST overwrite each
+            # c[i*n+j], not treat it as an accumulator. Catches the
+            # `acc = c[i*n+j]` class of bugs (seed 03 in our benchmark).
+            ShapeCase(
+                name="prefilled_output_buffer_2x2",
+                inputs={
+                    "a": rng.standard_normal((2, 2)).tolist(),
+                    "b": rng.standard_normal((2, 2)).tolist(),
+                    # Distinct non-zero garbage so coincidental cancellations
+                    # with sum(a*b) are very unlikely.
+                    "c_init": [2.5, -1.75, 3.125, -0.5],
+                    "m": 2, "k": 2, "n": 2,
+                },
+                rationale=(
+                    "output buffer prefilled with non-zero values; "
+                    "guards against accumulator-mode bugs that read c[] as initial state"
+                ),
+            ),
         ]
 
     if op_name == "softmax_fp32":

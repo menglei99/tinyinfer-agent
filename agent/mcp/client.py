@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -32,9 +33,14 @@ class ToolCallResult:
 
 
 def _server_params(python_exe: Optional[str] = None) -> StdioServerParameters:
+    # The MCP SDK only forwards a minimal "safe" env subset when StdioServerParameters.env
+    # is None — that strips TINYINFER_DOCKER_IMAGE, TINYINFER_PROJECT_DIR, TINYINFER_BUILD_DIR,
+    # LangSmith creds, etc. Pass the parent env through explicitly so the server sees the
+    # same configuration the agent process did.
     return StdioServerParameters(
         command=python_exe or sys.executable,
         args=["-m", "agent.mcp.server"],
+        env={k: v for k, v in os.environ.items() if v is not None},
     )
 
 

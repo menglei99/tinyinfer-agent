@@ -397,6 +397,8 @@ def _coverage_misses(op_name: str, skill: SkillKind, names_lower: list[str]) -> 
                 miss.append("k1_outer_product_shape")
             if not any_tag("aligned"):
                 miss.append("hardware_aligned_shape")
+            if not any_tag("prefilled", "output_buffer", "buffer_init"):
+                miss.append("output_buffer_init_case")
         elif op_name in ("softmax_fp32", "layernorm_fp32"):
             if not any_tag("basic"):
                 miss.append("basic_shape")
@@ -491,6 +493,16 @@ def execute_tests_node(state: AgentState) -> dict[str, Any]:
     # Probe first; if no cmake, return a skipped result and let the report explain.
     probe = call_tools([("cmake_available", {})])
     if not probe or not probe[0].payload.get("available"):
+        payload = probe[0].payload if probe else {}
+        mode = payload.get("mode", "host")
+        image = payload.get("image")
+        if mode == "docker":
+            reason = (
+                f"docker mode requested (image={image!r}) but docker/image not reachable; "
+                f"build it with `docker build -t {image} docker/builder/`."
+            )
+        else:
+            reason = "cmake not available on host PATH; execution skipped."
         return {
             "execution_results": [
                 ExecutionResult(
@@ -498,7 +510,7 @@ def execute_tests_node(state: AgentState) -> dict[str, Any]:
                     compiled=False,
                     ran=False,
                     passed=False,
-                    stderr="cmake not available on host PATH; execution skipped.",
+                    stderr=reason,
                 )
             ]
         }

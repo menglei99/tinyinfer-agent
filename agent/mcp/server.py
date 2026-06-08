@@ -63,11 +63,17 @@ def _tail(s: str, n: int) -> str:
 
 @mcp.tool()
 def cmake_available() -> dict:
-    """Check whether cmake is installed on the host PATH.
+    """Check whether the toolchain (cmake or the configured docker image) is reachable.
 
-    Use this before any other tool to bail out early on a host without cmake.
+    Returns {available, mode, image} so the client can tell host-cmake from
+    docker-builder mode in its logs.
     """
-    return {"available": cmake_driver.cmake_available()}
+    image = cmake_driver._docker_image()
+    return {
+        "available": cmake_driver.cmake_available(),
+        "mode": "docker" if image else "host",
+        "image": image,
+    }
 
 
 @mcp.tool()

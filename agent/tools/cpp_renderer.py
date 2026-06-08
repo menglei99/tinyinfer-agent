@@ -62,6 +62,7 @@ def render_matmul_test(
     n: int,
     tol: float | None = None,
     rationale: str = "",
+    c_init: np.ndarray | None = None,
 ) -> str:
     # Auto-scale tolerance with output magnitude. fp32 carries ~7 decimal
     # digits, so we use a 1e-5 relative tolerance with a 1e-4 absolute floor.
@@ -69,7 +70,11 @@ def render_matmul_test(
         max_abs = float(np.max(np.abs(expected))) if expected.size else 0.0
         tol = max(1e-4, max_abs * 1e-5)
 
-    return f"""\
+    if c_init is None:
+        # Default path: vector-overload API allocates and zeroes c[] internally.
+        # Easy to read; doesn't exercise the API contract that c[] should be
+        # OVERWRITTEN (not accumulated into) by the implementation.
+        return f"""\
 TEST({suite}, {case_name}) {{
     // {rationale}
     std::vector<float> a = {{{_fmt_float_array(a)}}};
@@ -77,6 +82,27 @@ TEST({suite}, {case_name}) {{
     std::vector<float> expected = {{{_fmt_float_array(expected)}}};
 
     auto c = tinyinfer::matmul_fp32(a, b, {m}, {k}, {n});
+    ASSERT_EQ(c.size(), expected.size());
+    for (std::size_t i = 0; i < expected.size(); ++i) {{
+        EXPECT_NEAR(c[i], expected[i], {tol:.6g}f) << "mismatch at index " << i;
+    }}
+}}
+"""
+
+    # Pointer-API path: caller-owned c[] preloaded with non-zero values.
+    # Catches accumulator-style implementations that read c[i*n+j] as the
+    # initial acc instead of starting from 0.
+    return f"""\
+TEST({suite}, {case_name}) {{
+    // {rationale}
+    std::vector<float> a = {{{_fmt_float_array(a)}}};
+    std::vector<float> b = {{{_fmt_float_array(b)}}};
+    std::vector<float> expected = {{{_fmt_float_array(expected)}}};
+    // Output buffer prefilled with non-zero garbage. A correct implementation
+    // must overwrite each c[i*n+j], not accumulate into it.
+    std::vector<float> c = {{{_fmt_float_array(c_init)}}};
+
+    ASSERT_TRUE(tinyinfer::matmul_fp32(a.data(), b.data(), c.data(), {m}, {k}, {n}));
     ASSERT_EQ(c.size(), expected.size());
     for (std::size_t i = 0; i < expected.size(); ++i) {{
         EXPECT_NEAR(c[i], expected[i], {tol:.6g}f) << "mismatch at index " << i;

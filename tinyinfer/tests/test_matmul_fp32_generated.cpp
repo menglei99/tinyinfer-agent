@@ -123,3 +123,19 @@ TEST(MatmulGenerated, aligned_16x32_32x64) {
         EXPECT_NEAR(c[i], expected[i], 0.000213445f) << "mismatch at index " << i;
     }
 }
+
+TEST(MatmulGenerated, prefilled_output_buffer_2x2) {
+    // output buffer prefilled with non-zero values; guards against accumulator-mode bugs that read c[] as initial state
+    std::vector<float> a = {-0.7842585f, -0.1250444f, -0.6100988f, 2.299664f};
+    std::vector<float> b = {-0.08973077f, 1.545232f, -0.1956223f, 0.2592877f};
+    std::vector<float> expected = {0.0948336f, -1.244284f, -0.395121f, -0.3464699f};
+    // Output buffer prefilled with non-zero garbage. A correct implementation
+    // must overwrite each c[i*n+j], not accumulate into it.
+    std::vector<float> c = {2.5f, -1.75f, 3.125f, -0.5f};
+
+    ASSERT_TRUE(tinyinfer::matmul_fp32(a.data(), b.data(), c.data(), 2, 2, 2));
+    ASSERT_EQ(c.size(), expected.size());
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+        EXPECT_NEAR(c[i], expected[i], 0.0001f) << "mismatch at index " << i;
+    }
+}

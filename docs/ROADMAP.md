@@ -55,11 +55,20 @@ python -m agent.cli analyze --diff demo/diffs/sample_matmul.diff --mock
 
 ## Stretch（Week 5-6）
 
+- [x] **Docker 编译器后端**：本机无 MSVC/g++ 时用 docker 容器跑 cmake/build/ctest。
+       MCP server / LangGraph 节点零修改，docker 切换在 `cmake_driver` 内部完成。
+       详见 [`docs/DOCKER_BUILDER.md`](DOCKER_BUILDER.md)。
+- [x] **真实 fault-injection oracle**：apply mutation → docker build → ctest，
+       让 ablation accuracy 列脱离启发式饱和。结果在 devlog 07：5 个配置都掉到 90%
+       （都漏 seed 03 uninit accumulator），暴露 agent **共同的架构盲区**。
 - [ ] 通过 ONNX Runtime 给 fused / quantized 算子做参考 oracle
 - [ ] 跨硬件：触发 ARM 交叉编译的测试调用
 - [x] **Reflexion loop**：critic FAIL 的反馈喂回 generator 作为 lesson —— 已实现，
        通过 `REFLEXION` 环境变量门控；ablation devlog 06 表明在当前 benchmark
        上没显著提升（scope 问题 + critic 漂移），保留作进一步探索。
+- [x] **Output-buffer init 维度**：让 numerical skill 在某些 case 测非零 init buffer，
+       让 seed 03 类的 uninit-accumulator fault 被抓到。落地后 mock_norag accuracy
+       从 9/10 → 10/10 —— agent 真的学了一个新维度。devlog 07 末尾补记。
 - [ ] 真实开源项目目标（NCNN 或 mlx）：在真实 PR 上 demo
 - [ ] 简历 bullet + 面试讲稿
 

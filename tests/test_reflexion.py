@@ -71,6 +71,7 @@ def test_critic_no_lesson_on_pass():
         TestCase(op_name="matmul_fp32", skill=SkillKind.NUMERICAL, test_name="stability_large_magnitude", cpp_source="x"),
         TestCase(op_name="matmul_fp32", skill=SkillKind.NUMERICAL, test_name="outer_product_k1", cpp_source="x"),
         TestCase(op_name="matmul_fp32", skill=SkillKind.NUMERICAL, test_name="aligned_16x32_32x64", cpp_source="x"),
+        TestCase(op_name="matmul_fp32", skill=SkillKind.NUMERICAL, test_name="prefilled_output_buffer_2x2", cpp_source="x"),
     ]
     out = critic_node({"generated_tests": full, "critic_iterations": 0}, llm=None)
     assert out["critic_verdict"].passed is True

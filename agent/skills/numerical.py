@@ -181,6 +181,12 @@ class NumericalSkill(Skill):
             a = np.asarray(sc.inputs["a"], dtype=np.float32)
             b = np.asarray(sc.inputs["b"], dtype=np.float32)
             ref = oracle.compute("matmul_fp32", {"a": a, "b": b})
+            c_init_list = sc.inputs.get("c_init")
+            c_init = (
+                np.asarray(c_init_list, dtype=np.float32)
+                if c_init_list is not None
+                else None
+            )
             body_lines.append(
                 cpp_renderer.render_matmul_test(
                     suite=suite,
@@ -192,6 +198,7 @@ class NumericalSkill(Skill):
                     k=sc.inputs["k"],
                     n=sc.inputs["n"],
                     rationale=sc.rationale,
+                    c_init=c_init,
                 )
             )
             out.append(
