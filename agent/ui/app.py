@@ -1,17 +1,16 @@
-"""Streamlit UI for tinyinfer-agent.
+"""tinyinfer-agent 的 Streamlit UI。
 
-Run it (not import it):
+跑（不是 import）：
 
     pip install -e ".[ui]"
     streamlit run agent/ui/app.py
 
-Three panels:
-  1. Input  — paste a diff or upload a .diff/.patch file, pick LLM provider + toggles
-  2. Tests  — generated C++ test files, one expander per (op, skill)
-  3. Critic — verdict badge + coverage report + retrieved RAG context
+三个面板：
+  1. Input  —— 粘贴 diff 或上传 .diff/.patch 文件，选 LLM provider + 开关
+  2. Tests  —— 生成的 C++ 测试文件，每个 (op, skill) 一个 expander
+  3. Critic —— verdict 标签 + coverage report + 检索到的 RAG context
 
-The app constructs the same LangGraph pipeline the CLI uses, so behaviour is
-identical to `python -m agent.cli analyze`.
+app 构造的是 CLI 同一份 LangGraph pipeline，行为跟 `python -m agent.cli analyze` 等价。
 """
 
 from __future__ import annotations
@@ -19,11 +18,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-# Guard against accidental `import agent.ui.app` — Streamlit apps must be run
-# via `streamlit run`, which executes this module as __main__.
+# 防止误 `import agent.ui.app` —— Streamlit app 必须通过 `streamlit run` 启动，
+# 那条路径会把这个 module 当作 __main__ 执行。
 if __name__ != "__main__" and not os.getenv("STREAMLIT_RUNTIME_ENV") and "streamlit" not in os.getenv("_", ""):
-    # Soft guard: don't hard-raise (pytest may import the module for coverage),
-    # but the heavy UI code below is gated on _running_under_streamlit().
+    # 软保护：不强 raise（pytest 可能 import 这个 module 做 coverage），
+    # 但下面真正的 UI 代码靠 _running_under_streamlit() 门控
     pass
 
 
@@ -127,7 +126,7 @@ def main() -> None:
     with col_tests:
         st.subheader("2. Generated tests")
         st.write(f"Detected ops: {', '.join(o.name for o in ops) or '(none)'}")
-        # Group by (op, file_suffix) so each generated .cpp shows once.
+        # 按 (op, file_suffix) 分组，每个生成的 .cpp 只展示一次
         seen: dict[str, str] = {}
         for t in tests:
             suffix = ""
@@ -167,5 +166,5 @@ def main() -> None:
 if _running_under_streamlit():
     main()
 elif __name__ == "__main__":
-    # Allow `python agent/ui/app.py` to print a helpful hint.
-    print("This is a Streamlit app. Run it with:\n    streamlit run agent/ui/app.py")
+    # 让 `python agent/ui/app.py` 直接跑能打印有用提示
+    print("这是一个 Streamlit app。请用如下命令跑：\n    streamlit run agent/ui/app.py")

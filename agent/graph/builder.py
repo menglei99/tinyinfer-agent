@@ -1,15 +1,15 @@
-"""LangGraph StateGraph wiring.
+"""LangGraph StateGraph 接线。
 
-Flow:
-    parse_diff -> route_skill -> generate_tests -> critic
-                                                    |
-                                  (fail, iter < N) -+-> generate_tests
-                                  (pass or iter>=N) -> install_tests
-                                                    -> execute? (gated by state.execute_requested)
-                                                    -> write_report -> END
+流程：
+    parse_diff -> route_skill -> retrieve_context -> generate_tests -> critic
+                                                                        |
+                                          (fail, iter < N) -------------+-> generate_tests
+                                          (pass or iter>=N) -> install_tests
+                                                            -> execute? (受 state.execute_requested 门控)
+                                                            -> write_report -> END
 
-execute_tests goes through the local MCP stdio server (agent.mcp.server) so
-the same toolchain entry point is shared by Claude Desktop / Cursor / this agent.
+execute_tests 走本地 MCP stdio server（agent.mcp.server），所以同一套 toolchain
+入口被 Claude Desktop / Cursor / 本 agent 共用。
 """
 
 from __future__ import annotations

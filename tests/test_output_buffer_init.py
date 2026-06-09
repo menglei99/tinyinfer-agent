@@ -1,8 +1,8 @@
-"""Tests for the c_init pointer-API path in render_matmul_test.
+"""render_matmul_test 里 c_init 指针 API 路径的测试。
 
-Covers the architectural gap surfaced by devlog 07: the vector-overload wrapper
-zero-initialises c[] internally, hiding accumulator-mode bugs (seed 03). When
-c_init is supplied the renderer must switch to the pointer API and preload c[].
+覆盖 devlog 07 发现的架构盲区：vector 重载 wrapper 内部把 c[] 零初始化，
+盖住了 accumulator-mode bug（seed 03）。当 c_init 被设上时，renderer 必须
+切到 pointer API 并预填 c[]。
 """
 
 from __future__ import annotations

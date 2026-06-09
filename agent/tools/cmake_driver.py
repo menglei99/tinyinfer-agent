@@ -1,12 +1,12 @@
-"""Drive the C++ toolchain: cmake configure / build / ctest.
+"""驱动 C++ toolchain：cmake configure / build / ctest。
 
-By default we shell out to the host `cmake` / `ctest`. On machines that
-lack a C++ compiler (this dev box, for example), set TINYINFER_DOCKER_IMAGE
-to route every command through `docker run --rm -v <project_root>:/work`
-against that image. See docs/DOCKER_BUILDER.md.
+默认直接调宿主的 `cmake` / `ctest`。如果机器上没 C++ 编译器（比如这台开发
+机），设上 TINYINFER_DOCKER_IMAGE，所有命令会被包成
+`docker run --rm -v <project_root>:/work` 跑在那个 image 里。详见
+docs/DOCKER_BUILDER.md。
 
-The switch is contained here so callers (agent.mcp.server, the LangGraph
-execute_tests_node) don't have to know which mode is active.
+模式切换只在本文件内做，caller（agent.mcp.server、LangGraph 的
+execute_tests_node）不需要知道当前是哪种模式。
 """
 
 from __future__ import annotations
@@ -30,34 +30,34 @@ class CommandResult:
         return self.returncode == 0
 
 
-# ---------- mode detection ----------
+# ---------- 模式判断 ----------
 
 
 def _docker_image() -> str | None:
-    """Active docker image name, or None for host-mode."""
+    """当前生效的 docker image 名；None 表示 host 模式。"""
     v = (os.getenv("TINYINFER_DOCKER_IMAGE") or "").strip()
     return v or None
 
 
 def _mount_root() -> Path:
-    """Host directory that gets bind-mounted to /work inside the container.
+    """要 bind-mount 到容器内 /work 的宿主目录。
 
-    Defaults to the resolved tinyinfer/ project dir. Override with
-    TINYINFER_PROJECT_DIR (an absolute or repo-relative path).
+    默认 = 已 resolve 的 tinyinfer/ 项目目录。可通过 TINYINFER_PROJECT_DIR
+    覆盖（绝对路径或仓库相对路径都行）。
     """
     raw = os.getenv("TINYINFER_PROJECT_DIR") or "tinyinfer"
     return Path(raw).resolve()
 
 
-# ---------- runners ----------
+# ---------- runner ----------
 
 
 def _run(cmd: list[str], cwd: Path | None = None, timeout: int = 600) -> CommandResult:
-    """Host-side subprocess.run with text capture.
+    """宿主侧 subprocess.run + 文本捕获。
 
-    `encoding="utf-8", errors="replace"` keeps Windows from blowing up when
-    the child writes UTF-8 (e.g. cmake/ctest output relayed from docker)
-    while the host code page is GBK.
+    `encoding="utf-8", errors="replace"` 防止 Windows 在子进程写 UTF-8
+    （比如从 docker relay 出来的 cmake/ctest 输出）而宿主 code page 是 GBK
+    时炸掉。
     """
     proc = subprocess.run(
         cmd,
@@ -75,10 +75,10 @@ def _run(cmd: list[str], cwd: Path | None = None, timeout: int = 600) -> Command
 
 
 def _to_container_path(host_path: Path, mount_root: Path) -> str:
-    """Translate a host path to its /work/<rel> equivalent inside the container.
+    """把宿主路径翻译成容器内 /work/<rel> 形式。
 
-    Both args are resolved before comparison so symlinks / case-insensitive
-    Windows paths don't trip the containment check.
+    两个参数都先 resolve，避免 symlink / Windows 大小写不敏感把 containment
+    判断绊掉。
     """
     host_abs = host_path.resolve()
     root_abs = mount_root.resolve()
@@ -92,14 +92,14 @@ def _to_container_path(host_path: Path, mount_root: Path) -> str:
             f"set TINYINFER_PROJECT_DIR to a directory that contains all "
             f"cmake/build paths"
         ) from exc
-    # Force forward slashes for the container (Linux).
+    # 容器内是 Linux，路径用正斜杠
     return "/work/" + rel.as_posix()
 
 
 def _docker_run(
     cmd_inside: list[str], image: str, mount_root: Path, timeout: int = 600
 ) -> CommandResult:
-    """Run a command inside a one-shot docker container."""
+    """在一次性 docker 容器里跑一条命令。"""
     docker_cmd = [
         "docker",
         "run",
@@ -118,10 +118,10 @@ def _docker_run(
 
 
 def cmake_available() -> bool:
-    """True when cmake (or our chosen docker image) is reachable.
+    """cmake（或选定的 docker image）能不能用。
 
-    Host mode: `shutil.which("cmake")`.
-    Docker mode: `docker image inspect <image>` returns 0.
+    Host 模式：`shutil.which("cmake")`。
+    Docker 模式：`docker image inspect <image>` 返回 0。
     """
     image = _docker_image()
     if image is None:
@@ -133,7 +133,7 @@ def cmake_available() -> bool:
 
 
 def configure(project_dir: Path, build_dir: Path) -> CommandResult:
-    """Equivalent to `cmake -S <project_dir> -B <build_dir> -DCMAKE_BUILD_TYPE=Release`."""
+    """等价于 `cmake -S <project_dir> -B <build_dir> -DCMAKE_BUILD_TYPE=Release`。"""
     image = _docker_image()
     if image is None:
         build_dir.mkdir(parents=True, exist_ok=True)
@@ -147,8 +147,8 @@ def configure(project_dir: Path, build_dir: Path) -> CommandResult:
         )
 
     mount = _mount_root()
-    # Best-effort: create the build dir on host so the bind mount sees it
-    # immediately (avoids cmake racing with directory creation in the container).
+    # 提前在宿主侧建 build dir，让 bind mount 立刻能看到（避免容器里 cmake
+    # 和目录创建赛跑）。
     build_dir.mkdir(parents=True, exist_ok=True)
     cmd_inside = [
         "cmake",
@@ -160,7 +160,7 @@ def configure(project_dir: Path, build_dir: Path) -> CommandResult:
 
 
 def build(build_dir: Path, target: str | None = None) -> CommandResult:
-    """Equivalent to `cmake --build <build_dir> --config Release [--target <target>]`."""
+    """等价于 `cmake --build <build_dir> --config Release [--target <target>]`。"""
     image = _docker_image()
     if image is None:
         cmd = ["cmake", "--build", str(build_dir), "--config", "Release"]
@@ -175,12 +175,12 @@ def build(build_dir: Path, target: str | None = None) -> CommandResult:
     ]
     if target:
         cmd_inside += ["--target", target]
-    # Build can be slow on first FetchContent (clones googletest).
+    # 首次 build 可能很慢（FetchContent 要 clone googletest）
     return _docker_run(cmd_inside, image=image, mount_root=mount, timeout=1200)
 
 
 def ctest(build_dir: Path, test_filter: str | None = None) -> CommandResult:
-    """Equivalent to `ctest --test-dir <build_dir> --output-on-failure [-R <filter>]`."""
+    """等价于 `ctest --test-dir <build_dir> --output-on-failure [-R <filter>]`。"""
     image = _docker_image()
     if image is None:
         cmd = ["ctest", "--test-dir", str(build_dir), "--output-on-failure"]

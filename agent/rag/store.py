@@ -1,20 +1,16 @@
-"""Vector store abstraction for the RAG retriever.
+"""RAG retriever 用的向量库抽象。
 
-Backends:
-    NumpyVectorStore   -> in-memory; cosine similarity via matrix multiply.
-                          Default in tests + no-deps fallback.
-    ChromaVectorStore  -> embedded persistent store via `chromadb`. Default for
-                          live runs (sqlite-backed; works on Windows out of the
-                          box).
-    QdrantVectorStore  -> embedded local-mode `qdrant-client`. Optional. Rich
-                          metadata filter syntax; same client also speaks to a
-                          Qdrant server.
-    MilvusVectorStore  -> wraps pymilvus.MilvusClient against milvus-lite.
-                          Optional; kept for users who already invested in the
-                          Milvus stack.
+后端：
+    NumpyVectorStore   -> 内存式；用矩阵乘做 cosine similarity。
+                          测试默认 + 没依赖时的 fallback。
+    ChromaVectorStore  -> 通过 `chromadb` 的嵌入式持久化 store。运行时默认
+                          （sqlite 后端；Windows 上开箱即用）。
+    QdrantVectorStore  -> 嵌入式本地 `qdrant-client`。可选。filter 语法最丰富，
+                          同一个 client 也能连 Qdrant server。
+    MilvusVectorStore  -> 用 pymilvus.MilvusClient 包 milvus-lite。可选；保留
+                          给已经投入 Milvus 栈的用户。
 
-All four expose the same `upsert` / `search` shape so the rest of the
-pipeline doesn't care which one is wired in.
+四个都暴露同一套 `upsert` / `search` 形状，pipeline 其余部分不关心底下接的是哪个。
 """
 
 from __future__ import annotations
@@ -27,7 +23,7 @@ from typing import Optional, Protocol
 import numpy as np
 
 
-# ---------- data classes ----------
+# ---------- data class ----------
 
 
 @dataclass
@@ -59,23 +55,21 @@ class VectorStore(Protocol):
     ) -> list[ScoredDoc]: ...
 
 
-# ---------- numpy backend ----------
+# ---------- numpy 后端 ----------
 
 
 class NumpyVectorStore:
-    """In-memory cosine-similarity store.
+    """内存版 cosine-similarity store。
 
-    Embeddings are L2-normalized at upsert time so search reduces to a single
-    matmul + topk.
+    embedding 在 upsert 时就 L2-normalize，search 退化成一次 matmul + topk。
 
-    Dim is inferred from the first upsert — keeps the call site free of an
-    `embedding_dim` argument and makes swapping to a different embedder a
-    one-line change.
+    维度从第一次 upsert 推断 —— 调用方不需要传 `embedding_dim` 参数，换 embedder
+    时改一行就行。
     """
 
     def __init__(self) -> None:
         self._docs: list[Document] = []
-        self._matrix: Optional[np.ndarray] = None  # shape (N, dim), unit-norm rows
+        self._matrix: Optional[np.ndarray] = None  # shape (N, dim)，行做了 unit-norm
         self._dim: Optional[int] = None
 
     def upsert(self, docs: list[Document], embeddings: list[list[float]]) -> None:
@@ -86,7 +80,7 @@ class NumpyVectorStore:
 
         arr = np.asarray(embeddings, dtype=np.float32)
         norms = np.linalg.norm(arr, axis=1, keepdims=True)
-        # Avoid divide-by-zero for the (very unlikely) all-zero vector.
+        # 防止全零向量除以 0（虽然非常不可能）
         arr = arr / np.maximum(norms, 1e-12)
 
         if self._dim is None:
@@ -111,12 +105,12 @@ class NumpyVectorStore:
         if self._matrix is None or not self._docs:
             return []
         if filter_expr:
-            # Numpy backend ignores filters for now — flagged in DEFERRED_VALIDATION.
+            # numpy 后端目前忽略 filter —— 列在 DEFERRED_VALIDATION 里
             pass
 
         q = np.asarray(query_vec, dtype=np.float32)
         q = q / max(float(np.linalg.norm(q)), 1e-12)
-        scores = self._matrix @ q  # cosine similarity since both sides unit-norm.
+        scores = self._matrix @ q  # 双方都做了 unit-norm，点积就是 cosine sim
 
         k = min(top_k, scores.shape[0])
         idx = np.argpartition(-scores, k - 1)[:k]
@@ -128,20 +122,18 @@ class NumpyVectorStore:
         return len(self._docs)
 
 
-# ---------- chroma backend (default for live runs) ----------
+# ---------- chroma 后端（运行时默认）----------
 
 
 class ChromaVectorStore:
-    """Embedded persistent Chroma store.
+    """嵌入式持久化 Chroma store。
 
-    Why Chroma as the default: it installs cleanly on Windows (no native gRPC
-    fight), is sqlite-backed (no separate daemon), and is the most common
-    "real" vector DB in LangChain demos — meaning the patterns here transfer
-    to most other RAG tutorials.
+    为啥默认选 Chroma：Windows 安装干净（不用跟原生 gRPC 死磕）、sqlite 后端
+    （不用单独 daemon）、是 LangChain demo 里最常见的"真"向量库 —— 这里的模式
+    搬到大多数其他 RAG 教程上都能用。
 
-    All embeddings supplied by the caller — we never hand text to Chroma's
-    built-in embedder; the same embedder powers the dense path of the
-    HybridRetriever already.
+    embedding 全部由 caller 提供 —— 不让 Chroma 去做内置 embed；同一个
+    embedder 已经在驱动 HybridRetriever 的 dense 路径。
     """
 
     _COLLECTION = "tinyinfer-rag"
@@ -151,7 +143,7 @@ class ChromaVectorStore:
             import chromadb  # type: ignore
         except ImportError as exc:
             raise ImportError(
-                "ChromaVectorStore requires chromadb. Install with `pip install -e .[rag]`."
+                "ChromaVectorStore 需要 chromadb，请装 `pip install -e .[rag]`。"
             ) from exc
 
         self._chromadb = chromadb
@@ -160,7 +152,7 @@ class ChromaVectorStore:
         self._collection_name = collection_name or self._COLLECTION
         self._collection = self._client.get_or_create_collection(
             name=self._collection_name,
-            # cosine to match the NumpyVectorStore semantics.
+            # 用 cosine 跟 NumpyVectorStore 语义对齐
             metadata={"hnsw:space": "cosine"},
         )
 
@@ -188,8 +180,8 @@ class ChromaVectorStore:
             "include": ["documents", "metadatas", "distances"],
         }
         if filter_expr:
-            # Chroma `where` expects a dict; if the caller still passes a string
-            # we leave it on the floor (no-op) rather than raise.
+            # Chroma 的 `where` 期望 dict；caller 还传字符串就 silently no-op，
+            # 不报错。
             if isinstance(filter_expr, dict):
                 kwargs["where"] = filter_expr
 
@@ -200,8 +192,8 @@ class ChromaVectorStore:
         dists = (res.get("distances") or [[]])[0]
         out: list[ScoredDoc] = []
         for doc_id, text, meta, dist in zip(ids, docs_text, metas, dists):
-            # Chroma returns cosine *distance* (1 - similarity). Flip so larger
-            # = better, matching the numpy/milvus convention used elsewhere.
+            # Chroma 返回的是 cosine *distance*（1 - similarity）。翻一下让"大 = 好"
+            # 跟 numpy/milvus 后端的约定对齐。
             score = float(1.0 - dist)
             out.append(
                 ScoredDoc(
@@ -212,7 +204,7 @@ class ChromaVectorStore:
         return out
 
     def reset(self) -> None:
-        """Drop the collection. Useful for tests."""
+        """drop 掉 collection。给测试用。"""
         try:
             self._client.delete_collection(self._collection_name)
         except Exception:
@@ -222,15 +214,14 @@ class ChromaVectorStore:
         )
 
 
-# ---------- qdrant backend (optional) ----------
+# ---------- qdrant 后端（可选）----------
 
 
 class QdrantVectorStore:
-    """Embedded Qdrant via `qdrant-client` local mode.
+    """通过 `qdrant-client` local 模式跑嵌入式 Qdrant。
 
-    Qdrant gives the richest filter syntax of the optional backends. The same
-    client also talks to a Qdrant server (`url="http://host:6333"`); we only
-    use local mode here to stay Windows-friendly.
+    Qdrant 在可选后端里 filter 语法最丰富。同一个 client 也能连 Qdrant server
+    （`url="http://host:6333"`）；这里只用 local 模式，保 Windows 友好。
     """
 
     _COLLECTION = "tinyinfer_rag"
@@ -246,8 +237,8 @@ class QdrantVectorStore:
             from qdrant_client.http import models as _m  # type: ignore
         except ImportError as exc:
             raise ImportError(
-                "QdrantVectorStore requires qdrant-client. "
-                "Install with `pip install -e .[rag-qdrant]`."
+                "QdrantVectorStore 需要 qdrant-client。"
+                "请装 `pip install -e .[rag-qdrant]`。"
             ) from exc
 
         self._models = _m
@@ -280,7 +271,7 @@ class QdrantVectorStore:
 
         points = [
             self._models.PointStruct(
-                # Qdrant point ids must be int or uuid; hash strings to ints.
+                # Qdrant 的 point id 必须是 int 或 uuid，把字符串 hash 成 int
                 id=abs(hash(d.doc_id)) & ((1 << 63) - 1),
                 vector=vec,
                 payload={"doc_id": d.doc_id, "text": d.text, **(d.metadata or {})},
@@ -297,7 +288,7 @@ class QdrantVectorStore:
     ) -> list[ScoredDoc]:
         if not self._client.collection_exists(self._collection):
             return []
-        # qdrant-client 1.10+ deprecated `search` in favour of `query_points`.
+        # qdrant-client 1.10+ 弃用了 `search`，换 `query_points`
         resp = self._client.query_points(
             collection_name=self._collection,
             query=list(query_vec),
@@ -319,14 +310,14 @@ class QdrantVectorStore:
         return out
 
 
-# ---------- milvus backend (optional, legacy) ----------
+# ---------- milvus 后端（可选，遗留）----------
 
 
 class MilvusVectorStore:
-    """Wraps pymilvus.MilvusClient against a sqlite-backed milvus-lite db.
+    """用 pymilvus.MilvusClient 包 sqlite 后端的 milvus-lite db。
 
-    Kept for users who already use the Milvus stack. Not the default — Chroma
-    is gentler to install on Windows and has wider LangChain ecosystem support.
+    给已经在用 Milvus 栈的用户保留。不是默认 —— Chroma 在 Windows 上更好装，
+    且 LangChain 生态支持更广。
     """
 
     _COLLECTION = "tinyinfer_rag"
@@ -336,8 +327,8 @@ class MilvusVectorStore:
             from pymilvus import MilvusClient  # type: ignore
         except ImportError as exc:
             raise ImportError(
-                "MilvusVectorStore requires pymilvus + milvus-lite. "
-                "Install with `pip install -e .[rag-milvus]`."
+                "MilvusVectorStore 需要 pymilvus + milvus-lite。"
+                "请装 `pip install -e .[rag-milvus]`。"
             ) from exc
 
         self._db_path = str(Path(db_path).resolve())
@@ -428,10 +419,10 @@ _BACKEND_ALIASES = {
 
 
 def get_vector_store(backend: Optional[str] = None, **kwargs) -> VectorStore:
-    """Build a VectorStore.
+    """构造一个 VectorStore。
 
-    Backend names: "numpy", "chroma" (default), "qdrant", "milvus".
-    Reads VECTOR_STORE_BACKEND env var when `backend` is None.
+    后端名："numpy"、"chroma"（默认）、"qdrant"、"milvus"。
+    `backend` 不传时读 VECTOR_STORE_BACKEND env。
     """
     backend = (backend or os.getenv("VECTOR_STORE_BACKEND", "") or "").lower()
     backend = _BACKEND_ALIASES.get(backend, backend) or "chroma"

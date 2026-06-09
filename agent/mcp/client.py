@@ -1,13 +1,12 @@
-"""Synchronous wrapper around an MCP stdio client session.
+"""MCP stdio client session 的同步封装。
 
-LangGraph nodes are synchronous; the MCP SDK is async. This module spins up
-a stdio session against our own `agent.mcp.server`, executes a small batch
-of tool calls, and tears it down — all behind a blocking API.
+LangGraph 节点是同步的；MCP SDK 是 async 的。这个模块对我们自己的
+`agent.mcp.server` 拉起一个 stdio session，跑一小批 tool call，再 teardown
+—— 全部躲在一个阻塞 API 后面。
 
-For long-lived clients (e.g. a UI streaming many tool calls) a persistent
-async client is the right shape. For our pipeline node — "build then run
-tests, twice per pipeline" — spinning up a session per node is simpler and
-keeps the LangGraph code synchronous.
+如果是长寿命的 client（比如 UI 流式跑很多 tool call），用持久 async client
+更合适。对我们的 pipeline 节点 ——"build 一次 + run tests 一次，每个 pipeline
+执行两次"—— 每个节点新拉一个 session 更简单，也保持 LangGraph 代码同步。
 """
 
 from __future__ import annotations
@@ -33,10 +32,10 @@ class ToolCallResult:
 
 
 def _server_params(python_exe: Optional[str] = None) -> StdioServerParameters:
-    # The MCP SDK only forwards a minimal "safe" env subset when StdioServerParameters.env
-    # is None — that strips TINYINFER_DOCKER_IMAGE, TINYINFER_PROJECT_DIR, TINYINFER_BUILD_DIR,
-    # LangSmith creds, etc. Pass the parent env through explicitly so the server sees the
-    # same configuration the agent process did.
+    # MCP SDK 在 StdioServerParameters.env=None 时只转发一个最小"安全"env
+    # 子集 —— 那会把 TINYINFER_DOCKER_IMAGE、TINYINFER_PROJECT_DIR、
+    # TINYINFER_BUILD_DIR、LangSmith creds 等全部切掉。这里显式把父进程的
+    # env 透传过去，server 子进程看到的配置才和 agent 进程一致。
     return StdioServerParameters(
         command=python_exe or sys.executable,
         args=["-m", "agent.mcp.server"],
@@ -54,7 +53,7 @@ async def _session(python_exe: Optional[str] = None):
 
 
 def _parse_payload(content) -> dict:
-    """Decode FastMCP tool output. FastMCP wraps a JSON object as text content."""
+    """解码 FastMCP 的 tool 输出。FastMCP 把 JSON object 包成 text content。"""
     if not content:
         return {}
     item = content[0]
@@ -87,16 +86,15 @@ def call_tools(
     *,
     python_exe: Optional[str] = None,
 ) -> list[ToolCallResult]:
-    """Blocking entry point. Runs the supplied (tool_name, args) sequence
-    against a freshly-spawned MCP server, returns all results.
+    """阻塞式入口。对一个临时拉起的 MCP server 跑给定的 (tool_name, args)
+    序列，返回所有结果。
     """
-    # Use asyncio.run if no loop is running; otherwise fall back to a fresh loop.
+    # 没有 running loop 就用 asyncio.run；否则 fallback 到一个 fresh loop
     try:
         asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(_call_many(calls, python_exe=python_exe))
-    # Running inside an existing loop is unusual for LangGraph sync nodes
-    # but we handle it defensively.
+    # 在已有 loop 里跑对 LangGraph sync 节点来说不寻常，但做个防御
     new_loop = asyncio.new_event_loop()
     try:
         return new_loop.run_until_complete(_call_many(calls, python_exe=python_exe))

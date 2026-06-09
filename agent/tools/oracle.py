@@ -1,14 +1,15 @@
-"""Reference oracle: numpy as ground truth for operator outputs.
+"""参考 oracle：用 numpy 当算子输出的 ground truth。
 
-Why numpy and not ONNX Runtime for MVP:
-  - matmul / softmax / layernorm have direct numpy equivalents
-  - keeps deps light, runs anywhere
-ONNX Runtime is wired in for ops that don't have a clean numpy form
-(quantize, fused conv) — see Week 3 in ROADMAP.
+MVP 阶段为啥选 numpy 不选 ONNX Runtime：
+  - matmul / softmax / layernorm 都有直接的 numpy 等价
+  - 依赖轻，跑哪都行
+ONNX Runtime 准备给那些 numpy 不太好表达的算子用（quantize、fused conv）——
+详见 ROADMAP 的 Week 3。
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -103,7 +104,7 @@ def default_shape_cases(op_name: str, *, rng: np.random.Generator | None = None)
     rng = rng or np.random.default_rng(seed=42)
 
     if op_name == "matmul_fp32":
-        return [
+        cases = [
             ShapeCase(
                 name="square_2x2",
                 inputs={
@@ -186,26 +187,31 @@ def default_shape_cases(op_name: str, *, rng: np.random.Generator | None = None)
                 },
                 rationale="hardware-aligned tile sizes for SIMD/vectorised kernels",
             ),
-            # ---- API-contract case: caller-owned c[] is preloaded with
-            # non-zero values. A correct implementation MUST overwrite each
-            # c[i*n+j], not treat it as an accumulator. Catches the
-            # `acc = c[i*n+j]` class of bugs (seed 03 in our benchmark).
-            ShapeCase(
-                name="prefilled_output_buffer_2x2",
-                inputs={
-                    "a": rng.standard_normal((2, 2)).tolist(),
-                    "b": rng.standard_normal((2, 2)).tolist(),
-                    # Distinct non-zero garbage so coincidental cancellations
-                    # with sum(a*b) are very unlikely.
-                    "c_init": [2.5, -1.75, 3.125, -0.5],
-                    "m": 2, "k": 2, "n": 2,
-                },
-                rationale=(
-                    "output buffer prefilled with non-zero values; "
-                    "guards against accumulator-mode bugs that read c[] as initial state"
-                ),
-            ),
         ]
+        # ---- API 合约维度：caller-owned c[] 预填非零值。正确实现必须
+        # **覆写** 每个 c[i*n+j]，不能当 accumulator 用（抓 benchmark seed 03）。
+        # 通过 env `PREFILLED_OUTPUT_BUFFER_DEFAULT=off` 临时关掉，用于演示
+        # oracle-feedback reflexion：第一轮漏 seed 03，让 LLM 看 lesson 后自己
+        # 提议带 c_init 的 case。
+        env_v = (os.getenv("PREFILLED_OUTPUT_BUFFER_DEFAULT", "on") or "on").lower().strip()
+        if env_v not in ("0", "false", "off", "no"):
+            cases.append(
+                ShapeCase(
+                    name="prefilled_output_buffer_2x2",
+                    inputs={
+                        "a": rng.standard_normal((2, 2)).tolist(),
+                        "b": rng.standard_normal((2, 2)).tolist(),
+                        # 离散的非零 garbage，避免和 sum(a*b) 凑巧抵消。
+                        "c_init": [2.5, -1.75, 3.125, -0.5],
+                        "m": 2, "k": 2, "n": 2,
+                    },
+                    rationale=(
+                        "output buffer 预填非零值；防 accumulator-style bug "
+                        "（把 c[] 当成 acc 初值读）"
+                    ),
+                )
+            )
+        return cases
 
     if op_name == "softmax_fp32":
         return [

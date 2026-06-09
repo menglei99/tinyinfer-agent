@@ -1,10 +1,9 @@
-"""Skill base class.
+"""Skill 基类。
 
-A Skill encapsulates a testing dimension (numerical / perf / memory). Each
-skill owns:
-  - the LLM prompt fragment that biases the planner
-  - the test generation logic (renders C++ source)
-  - the per-skill critic dimensions
+一个 Skill 封装一个测试维度（numerical / perf / memory）。每个 skill 持有：
+  - 偏置 planner 的 LLM prompt 片段
+  - 测试生成逻辑（render C++ 源码）
+  - 这个 skill 的 per-skill critic 维度
 """
 
 from __future__ import annotations
@@ -23,4 +22,4 @@ class Skill(ABC):
 
     @abstractmethod
     def required_coverage_dimensions(self) -> list[str]:
-        """Coverage dimensions the critic should verify for this skill."""
+        """critic 该针对这个 skill 验证的覆盖维度。"""

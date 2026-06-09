@@ -1,10 +1,9 @@
-"""Compare ablation runs of the fault-injection benchmark.
+"""比较 fault-injection benchmark 的 ablation run。
 
-Reads N JSON reports (one per configuration) and prints a markdown table of
-the headline metrics — accuracy, average tests-per-seed, critic pass rate,
-average missing dimensions, RAG context use.
+读 N 份 JSON report（每个 configuration 一份），打印一张 markdown 头条指标表 ——
+accuracy、平均 tests-per-seed、critic pass rate、平均 missing dim、RAG 用了几个 doc。
 
-Usage:
+用法：
     python -m benchmark.compare results/mock_norag.json results/qwen_norag.json \
         results/qwen_rag.json results/qwen_sc3.json
 """

@@ -1,4 +1,4 @@
-"""Tests for the fault-injection benchmark harness."""
+"""fault-injection benchmark harness 的测试。"""
 
 from pathlib import Path
 

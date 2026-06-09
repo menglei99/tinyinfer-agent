@@ -1,9 +1,8 @@
-"""Tests for the docker-mode switch in cmake_driver.
+"""cmake_driver 里 docker 模式切换的测试。
 
-We mock subprocess.run so the unit tests never need a real docker daemon
-or compiler. The goal is to lock in command shape, mount layout, and path
-translation; the actual "does docker build work" verification is the
-manual sanity step in docs/DOCKER_BUILDER.md.
+mock 掉 subprocess.run，单测就不需要真 docker daemon 也不需要编译器。
+目的：锁定命令形状、mount 布局、路径翻译；至于"docker build 真的能跑"
+那是 docs/DOCKER_BUILDER.md 里的手动 sanity 步骤。
 """
 
 from __future__ import annotations

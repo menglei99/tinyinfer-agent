@@ -1,4 +1,4 @@
-"""Tests for the embedding client."""
+"""embedding client 的测试。"""
 
 import os
 

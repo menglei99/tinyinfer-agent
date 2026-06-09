@@ -1,7 +1,7 @@
-"""JSONL trace writer.
+"""JSONL trace writer。
 
-Each event is one line. Schema is intentionally flat and stable so trace
-files can be diffed, replayed, and inspected without a custom viewer.
+每个 event 一行。schema 故意做成扁平、稳定的，让 trace 文件能 diff、能回放、
+不用专门 viewer 就能看。
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ class TraceWriter:
             self.trace_id = trace_path.stem
 
         self.path = trace_path
-        self._fp = open(self.path, "a", encoding="utf-8", buffering=1)  # line-buffered
+        self._fp = open(self.path, "a", encoding="utf-8", buffering=1)  # 行缓冲
 
     def write(self, event_type: str, **fields: Any) -> None:
         record = {
@@ -54,7 +54,7 @@ class TraceWriter:
 
 
 def _json_default(obj: Any) -> Any:
-    # Pydantic models, enums, paths.
+    # Pydantic model、enum、Path
     if hasattr(obj, "model_dump"):
         return obj.model_dump()
     if hasattr(obj, "value"):

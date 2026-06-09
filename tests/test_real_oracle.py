@@ -1,8 +1,7 @@
-"""Real-oracle unit tests for the fault-injection harness.
+"""fault-injection harness 的 real-oracle 单测。
 
-We don't need (or want) docker running for these — every cmake_driver call
-is mocked so we can verify the harness's call shape, ctest parsing, and
-fall-back behaviour without spending 30 seconds rebuilding tinyinfer.
+每个 cmake_driver 调用都被 mock，套件跑起来不需要 docker、不需要真编译器，
+也不会花 30s 重 build tinyinfer。
 """
 
 from __future__ import annotations

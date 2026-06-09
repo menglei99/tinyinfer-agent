@@ -1,4 +1,4 @@
-"""Tests for retrieve_context_node."""
+"""retrieve_context_node 的测试。"""
 
 from agent.graph.nodes import retrieve_context_node
 from agent.rag.store import Document, ScoredDoc

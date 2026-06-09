@@ -1,6 +1,6 @@
-"""RAG retrieval primitives.
+"""RAG 检索原语。
 
-Public surface kept tight: import what graph nodes need, hide what they don't.
+对外接口保持窄：只 export graph 节点需要的，藏起来其他的。
 """
 
 from agent.rag.cache import cached_embed

@@ -1,19 +1,19 @@
-"""tinyinfer-toolchain MCP server.
+"""tinyinfer-toolchain MCP server。
 
-Exposes the C++ build & test toolchain over Model Context Protocol so any
-MCP-aware client (Claude Desktop, Cursor, our own agent's analyze loop) can
-drive cmake/ctest with the same wire format.
+把本地 C++ build & test toolchain 通过 Model Context Protocol 暴露出来，让任何
+MCP-aware 的客户端（Claude Desktop、Cursor、我们自己 agent 的 analyze loop）
+都能用同一套 wire format 驱动 cmake/ctest。
 
-Run as a stdio server:
+stdio server 跑法：
 
     python -m agent.mcp.server
 
-Or via CLI:
+或通过 CLI：
 
     tinyinfer-agent mcp-server
 
-Register with Claude Desktop by adding the snippet from `mcp_config.json.example`
-to your `claude_desktop_config.json`.
+要在 Claude Desktop 里注册，把 `mcp_config.json.example` 里那段拷到
+`claude_desktop_config.json` 即可。
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from mcp.server.fastmcp import FastMCP
 from agent.tools import cmake_driver
 
 
-# Project-aware default: assume the server is launched from repo root.
+# 项目相关默认值：假定 server 从 repo 根启动。
 # Override via TINYINFER_PROJECT_DIR / TINYINFER_BUILD_DIR env vars.
 _DEFAULT_PROJECT = os.getenv("TINYINFER_PROJECT_DIR", "tinyinfer")
 _DEFAULT_BUILD = os.getenv("TINYINFER_BUILD_DIR", "tinyinfer/build")
@@ -63,10 +63,10 @@ def _tail(s: str, n: int) -> str:
 
 @mcp.tool()
 def cmake_available() -> dict:
-    """Check whether the toolchain (cmake or the configured docker image) is reachable.
+    """检查 toolchain（cmake 或配的 docker image）能不能用。
 
-    Returns {available, mode, image} so the client can tell host-cmake from
-    docker-builder mode in its logs.
+    返回 {available, mode, image} 让 client 能在 log 里区分 host-cmake 和
+    docker-builder 两种模式。
     """
     image = cmake_driver._docker_image()
     return {

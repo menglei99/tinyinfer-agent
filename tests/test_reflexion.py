@@ -1,4 +1,4 @@
-"""Reflexion: critic FAIL -> lesson -> next-iteration generator prompt."""
+"""Reflexion：critic FAIL -> lesson -> 下一轮 generator prompt。"""
 
 import json
 

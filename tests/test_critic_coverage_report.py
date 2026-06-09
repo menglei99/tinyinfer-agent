@@ -1,4 +1,4 @@
-"""Tests for the critic upgrade: retrieved-context grounding + coverage_report."""
+"""critic 升级的测试：retrieved-context grounding + coverage_report。"""
 
 import json
 

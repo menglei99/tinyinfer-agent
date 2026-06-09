@@ -1,19 +1,16 @@
-"""Memory-safety skill.
+"""内存安全 skill。
 
-We don't try to plumb ASan into the CMake build (too invasive for a generated
-test). Instead we emit guard-band tests: allocate buffers with sentinel bytes
-on either side of the active region, run the op many times (with fresh
-allocations each iteration to stress the allocator path), then verify the
-sentinels are intact. This catches:
+我们不打算把 ASan 接进 CMake build（对生成测试来说太重）。改用 guard-band
+测试：在活跃区域两侧用 sentinel 字节填 buffer，跑 op 很多次（每次新分配，
+让 allocator 路径承压），然后验证 sentinel 还在。这能抓到：
 
-  - off-by-one writes past the end of the output buffer
-  - clobbers past the beginning of the input buffer
-  - leaks that grow per-iteration memory (the test loop is large enough that
-    a real leak shows up as obvious RSS pressure)
+  - 越界写到 output buffer 末尾之外
+  - 写过 input buffer 起始之前
+  - 每次迭代涨内存的 leak（测试循环够大，真泄漏会从 RSS 压力上明显看出来）
 
-For full leak / use-after-free coverage, the developer should rebuild with
-`-fsanitize=address` (gcc/clang) or `/fsanitize=address` (MSVC). The
-generated test still passes either way — sanitizers wrap, not replace, it.
+完整的 leak / use-after-free 覆盖需要开发者用 `-fsanitize=address`（gcc/clang）
+或 `/fsanitize=address`（MSVC）重 build。生成的测试不论如何都能过 —— sanitizer
+是包裹，不是替代。
 """
 
 from __future__ import annotations
@@ -25,7 +22,7 @@ from agent.skills.base import Skill
 from agent.state import ChangedOp, SkillKind, TestCase
 
 
-# Per-op (case name, params, loop_iters) tuples.
+# 按 op 给的 (case 名, params, loop_iters) tuple。
 _MEM_PLANS: dict[str, list[dict]] = {
     "matmul_fp32": [
         {"name": "memory_guard_bands_small", "m": 4, "k": 4, "n": 4, "iters": 256},

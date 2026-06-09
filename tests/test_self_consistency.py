@@ -1,4 +1,4 @@
-"""Tests for self-consistency shape voting in NumericalSkill."""
+"""NumericalSkill 里 self-consistency shape voting 的测试。"""
 
 import json
 

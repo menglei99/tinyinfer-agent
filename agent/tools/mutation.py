@@ -1,13 +1,12 @@
-"""Apply unified-diff mutations against an in-repo source tree and roll back.
+"""把 unified-diff mutation 应用到仓库内的源码树上，然后回滚。
 
-Used by the fault-injection benchmark to flip a clean checkout into a "buggy"
-state, build, run the agent's generated tests, then revert. Implemented as a
-context manager so a half-finished run never leaves the source tree poisoned.
+被 fault-injection benchmark 用来把 clean checkout 翻成 "buggy" 状态，build，
+跑 agent 生成的测试，然后 revert。封装成 context manager，保证半途出错也
+不会把源码树留在被污染状态。
 
-We intentionally implement just enough of the unified-diff format to handle our
-benchmark seeds (single-file, single-hunk, no rename/copy/binary). If a seed
-grows to multi-hunk or multi-file later it should keep working — the parser
-handles those — but we don't try to be `patch(1)`.
+故意只实现 unified-diff 的最小子集，够 benchmark 的 seed 用就行（单文件、
+多 hunk、不处理 rename/copy/binary）。如果以后 seed 长成多文件，parser 也能
+处理；只是别指望我们做成 `patch(1)`。
 """
 
 from __future__ import annotations
@@ -22,14 +21,14 @@ from typing import Iterator
 
 @dataclass
 class Hunk:
-    old_start: int  # 1-based line number in the OLD file where this hunk begins
-    old_lines: list[str]  # lines as they appear before the patch (no leading marker)
-    new_lines: list[str]  # lines as they should appear after the patch
+    old_start: int  # OLD 文件里 hunk 起始行号（1-based）
+    old_lines: list[str]  # patch 之前的行（不含 +/- 前缀）
+    new_lines: list[str]  # patch 之后期望的行
 
 
 @dataclass
 class FilePatch:
-    path: str  # repo-relative path (the "b/..." side of the diff)
+    path: str  # 仓库相对路径（diff 里 "b/..." 那一侧）
     hunks: list[Hunk]
 
 
@@ -37,11 +36,11 @@ _HUNK_HEADER = re.compile(r"^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@")
 
 
 def parse_unified_diff(diff_text: str) -> list[FilePatch]:
-    """Parse a unified diff into FilePatch objects.
+    """把 unified diff 解析成 FilePatch 列表。
 
-    Recognises the standard `diff --git`, `--- a/...`, `+++ b/...`, and `@@`
-    headers; ignores `index` and other metadata lines. A `+++ /dev/null`
-    target raises — we don't model file deletion (no seed needs it).
+    认识标准的 `diff --git`、`--- a/...`、`+++ b/...`、`@@` 这几种 header；
+    忽略 `index` 和其他 metadata 行。`+++ /dev/null` 直接 raise —— 我们不
+    建模文件删除（benchmark 没这种需求）。
     """
     patches: list[FilePatch] = []
     current: FilePatch | None = None
@@ -75,11 +74,11 @@ def parse_unified_diff(diff_text: str) -> list[FilePatch]:
             continue
 
         if current_hunk is None:
-            # Pre-hunk garbage (file mode etc.) — skip.
+            # hunk 之前的杂项（file mode 等）—— 跳过
             continue
 
         if not raw:
-            # Empty body line counts as both a context line in old and new.
+            # 空 body 行同时算作 old 和 new 的 context 行
             current_hunk.old_lines.append("")
             current_hunk.new_lines.append("")
             continue
@@ -93,29 +92,27 @@ def parse_unified_diff(diff_text: str) -> list[FilePatch]:
         elif marker == "+":
             current_hunk.new_lines.append(body)
         elif marker == "\\":
-            # "\ No newline at end of file" — we always preserve original trailing
-            # newline behaviour, so skip the marker.
+            # "\ No newline at end of file" —— 我们始终保留原文件的尾换行
+            # 行为，所以这个 marker 直接跳过
             continue
         else:
-            # Unknown marker — be loud rather than silently misapplying.
+            # 未知 marker —— 大声报错，别静默错应用
             raise ValueError(f"unrecognised diff line: {raw!r}")
 
     return patches
 
 
 def _apply_hunk_to_lines(lines: list[str], hunk: Hunk) -> list[str]:
-    """Return a new list of file lines with `hunk` applied.
+    """返回应用了 `hunk` 后的新文件行列表。
 
-    Strict match first; on miss we scan a small window around `old_start`
-    looking for a position where every old-line equals the source. This
-    handles seeds whose `old_start` is off by a few lines because the file
-    grew an include or a blank line since the diff was authored — same
-    behaviour as `patch(1) --fuzz=N` with N=2 lines.
+    先严格匹配；不中时在 `old_start` 附近一个小窗口里扫，找一个 old-line
+    全部对得上源码的位置。这处理 seed 的 `old_start` 因为文件后来加了 include
+    或空行而偏移几行的情况 —— 等价于 `patch(1) --fuzz=N`（N=2 行）。
 
-    A match must be unambiguous: if zero or multiple positions in the window
-    fit, we raise so a silently-misapplied patch can't poison the source.
+    匹配必须**唯一**：窗口里 0 个或多个都对得上时，raise，避免静默错应用
+    把源码污染。
     """
-    fuzz = 5  # lines on either side of the nominal old_start
+    fuzz = 5  # nominal old_start 两侧各扫几行
     target_lines = hunk.old_lines
 
     candidates: list[int] = []
@@ -129,7 +126,7 @@ def _apply_hunk_to_lines(lines: list[str], hunk: Hunk) -> list[str]:
             candidates.append(start_idx)
 
     if not candidates:
-        # Be loud: dump the first offending line so the user can fix the seed.
+        # 大声报错：把第一个对不上的行 dump 出来让用户能修 seed
         first_off = ""
         if 0 <= nominal < len(lines):
             actual = lines[nominal]
@@ -153,11 +150,10 @@ def _apply_hunk_to_lines(lines: list[str], hunk: Hunk) -> list[str]:
 
 
 def _split_keep_endings(text: str) -> tuple[list[str], str]:
-    """Split file text into (lines_without_endings, trailing_terminator).
+    """把文件文本拆成 (lines_without_endings, trailing_terminator)。
 
-    Tracks the trailing newline separately so the rejoin preserves "does
-    the file end in a newline?" — many C++ source files do, and tampering
-    with that bit is a common silent regression in patch tools.
+    单独跟踪尾换行，rejoin 时保留"文件是否以换行结尾"—— 很多 C++ 源文件
+    是这样，而 patch 工具偷偷改了这个 bit 是常见的静默 regression。
     """
     if text.endswith("\r\n"):
         trailing = "\r\n"
@@ -168,7 +164,7 @@ def _split_keep_endings(text: str) -> tuple[list[str], str]:
     else:
         trailing = ""
         body = text
-    # splitlines() drops all line terminators; the trailing one is handled above.
+    # splitlines() 会丢掉所有 line terminator；上面单独处理了 trailing
     lines = body.splitlines()
     return lines, trailing
 
@@ -181,11 +177,10 @@ def _join_lines(lines: list[str], trailing: str) -> str:
 def apply_diff(
     diff_text: str, project_root: Path | str = ".", *, encoding: str = "utf-8"
 ) -> Iterator[list[Path]]:
-    """Apply `diff_text` against files under `project_root`; revert on exit.
+    """把 `diff_text` 应用到 `project_root` 下的文件，退出时 revert。
 
-    Yields the list of mutated file paths so the caller can log them. Original
-    file contents are kept in memory; on exit (success OR exception) every
-    touched file is rewritten to its pre-mutation state.
+    yield 被改动的文件路径列表给 caller log。原始文件内容存到内存里；退出
+    （正常或异常）时所有 touched 文件都被覆写回 pre-mutation 状态。
     """
     root = Path(project_root)
     patches = parse_unified_diff(diff_text)
@@ -204,7 +199,7 @@ def apply_diff(
 
             text = original_bytes.decode(encoding)
             lines, trailing = _split_keep_endings(text)
-            # Apply hunks bottom-up so earlier line-number indices don't shift.
+            # 从底到顶应用 hunk，前面 hunk 的行号偏移不影响后面
             for hunk in sorted(patch.hunks, key=lambda h: h.old_start, reverse=True):
                 lines = _apply_hunk_to_lines(lines, hunk)
 
@@ -214,14 +209,13 @@ def apply_diff(
 
         yield touched
     finally:
-        # Restore byte-for-byte to avoid any encoding/EOL drift.
+        # 字节对字节恢复，避免 encoding/EOL 漂移
         for path, original in backups.items():
             try:
                 path.write_bytes(original)
             except OSError as exc:
-                # Surface restoration failures loudly — a poisoned source tree
-                # is the worst outcome. We re-raise the original problem after
-                # writing what we can; without this the user might never notice.
+                # 恢复失败要大声报错 —— 被污染的源码树是最糟的结果。
+                # 没这个 raise 用户可能永远发现不了。
                 _bail_loudly = io.StringIO()
                 _bail_loudly.write(
                     f"FATAL: failed to restore {path}: {exc}. "

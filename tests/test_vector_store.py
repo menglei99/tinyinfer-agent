@@ -1,4 +1,4 @@
-"""Tests for vector store backends."""
+"""向量库各后端的测试。"""
 
 import importlib
 

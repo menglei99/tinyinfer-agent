@@ -1,4 +1,4 @@
-"""Tests for the hybrid retriever, corpus, and embedding cache."""
+"""hybrid retriever、corpus 和 embedding cache 的测试。"""
 
 from pathlib import Path
 

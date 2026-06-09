@@ -1,8 +1,7 @@
-"""Smoke tests for the MCP server.
+"""MCP server 的 smoke 测试。
 
-We don't spawn a subprocess (slow, flaky on Windows CI). Instead we exercise
-the underlying tool implementations directly. The MCP wrapper is a thin layer
-on top of agent.tools.cmake_driver, so this gives high coverage for low cost.
+不拉子进程（慢、Windows CI 上 flaky）。直接调底下 tool 实现。MCP wrapper
+只是 agent.tools.cmake_driver 的薄壳，这样高覆盖、低成本。
 """
 
 import sys

@@ -1,11 +1,9 @@
-"""Tests for install_tests_node and execute_tests_node.
+"""install_tests_node 和 execute_tests_node 的测试。
 
-execute_tests_node spawns a real MCP subprocess and may take a few seconds;
-it is verified by the end-to-end smoke test rather than a per-node unit
-test.
+execute_tests_node 真的会拉起一个 MCP 子进程，可能要花几秒；端到端 smoke
+test 已经覆盖了它，这里不做 per-node 单测。
 
-On hosts without cmake, execute is expected to report a SKIPPED result
-(not a failure).
+宿主上没 cmake 时，execute 应该返回 SKIPPED 结果（不是 fail）。
 """
 
 import os

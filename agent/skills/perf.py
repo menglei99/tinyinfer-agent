@@ -1,18 +1,15 @@
-"""Performance (latency-regression) skill.
+"""性能（延迟回归）skill。
 
-We emit chrono-based microbenchmarks as GTest cases rather than a separate
-Google Benchmark binary — this lets the same `ctest` pipeline catch latency
-regressions without adding a new build dependency.
+我们用 chrono 写的 microbench 直接做成 GTest case，而不是单独的 Google Benchmark
+binary —— 这样同一套 `ctest` pipeline 就能抓延迟回归，不用新增 build 依赖。
 
-Strategy:
-  - One C++ file per op containing N perf cases.
-  - Each case runs warmup + measure iterations on a single representative
-    shape and asserts the median per-iter latency stays under a generous
-    budget. The intent is to fail loudly on order-of-magnitude regressions
-    (eg. a 10x slowdown from an algorithmic change), not micro-tune.
+策略：
+  - 每个 op 一个 C++ 文件，里面 N 个 perf case。
+  - 每个 case 在一个代表性 shape 上跑 warmup + measure 迭代，然后断言中位
+    per-iter 延迟在一个宽松 budget 之内。目标是大声 fail 数量级 regression
+    （比如某个算法改动导致 10x slowdown），不是微调性能。
 
-The budget is intentionally loose. A real project should baseline on its
-own CI hardware and ratchet down from there.
+budget 故意宽松。真生产项目应该在自己 CI 硬件上拉 baseline，然后 ratchet down。
 """
 
 from __future__ import annotations
@@ -26,8 +23,8 @@ from agent.skills.base import Skill
 from agent.state import ChangedOp, SkillKind, TestCase
 
 
-# Per-op (case name, params, budget_us) tuples. The budget is set loose so
-# the test serves as a regression alarm, not a perf certificate.
+# 按 op 给的 (case 名, params, budget_us) tuple。budget 留宽松，让测试当回归
+# 报警用，而不是性能证书。
 _PERF_PLANS: dict[str, list[dict]] = {
     "matmul_fp32": [
         {"name": "perf_small_16x16x16", "m": 16, "k": 16, "n": 16, "iters": 200, "budget_us": 200.0},
@@ -175,11 +172,11 @@ class PerformanceSkill(Skill):
                 )
             )
 
-        # We write a separate file (with _perf suffix) so a single op can
-        # have both a numerical and a perf generated test file side-by-side.
+        # 写成单独的文件（带 _perf suffix），让同一个 op 可以并存 numerical
+        # 和 perf 两个生成测试文件。
         src = _FILE_PROLOGUE.format(header=header) + "\n" + "\n".join(bodies)
         for tc in out:
             tc.cpp_source = src
-            # Used by install_tests_node to disambiguate filenames.
+            # install_tests_node 用这个字段做文件名 disambiguation
             tc.inputs = {"file_suffix": "perf"}
         return out

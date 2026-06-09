@@ -6,14 +6,14 @@ from agent.state import SkillKind
 
 
 def get_skill(kind: SkillKind, *, llm=None, lessons=None) -> Skill:
-    """Build a Skill instance.
+    """构造一个 Skill 实例。
 
     Args:
-        kind: which skill to build.
-        llm: optional LLM client (only NumericalSkill uses this today).
-        lessons: optional list of human-readable Reflexion lesson strings
-                 from earlier critic-loop iterations. Each skill ignores
-                 lessons it can't act on.
+        kind: 要建哪个 skill。
+        llm: 可选 LLM client（目前只有 NumericalSkill 用得到）。
+        lessons: 可选的 human-readable Reflexion lesson 字符串列表，来自前几轮
+                 critic loop 迭代。每个 skill 自己决定是否能用上 lesson，用不上
+                 就忽略。
     """
     if kind == SkillKind.NUMERICAL:
         return NumericalSkill(llm=llm, lessons=lessons)

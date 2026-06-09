@@ -1,21 +1,19 @@
-"""Optional LangSmith integration.
+"""可选的 LangSmith 集成。
 
-The simplest activation path — recommended:
+最简单的开启路径（推荐）：
 
     pip install langsmith
     export LANGSMITH_TRACING=true
     export LANGSMITH_API_KEY=...
-    export LANGSMITH_PROJECT=tinyinfer-agent     # optional
+    export LANGSMITH_PROJECT=tinyinfer-agent     # 可选
 
-LangGraph auto-instruments when these env vars are set; we don't have to wrap
-or monkey-patch anything ourselves. This module exists only to:
+这几个 env var 设上之后 LangGraph 会自动 instrument；我们不用自己 wrap 也不用
+monkey-patch。这个 module 只做两件事：
 
-  1. Detect whether the activation is configured.
-  2. Print a one-line status banner at CLI startup so the user knows whether
-     traces will appear in their dashboard.
+  1. 判断当前配置是否激活了 LangSmith。
+  2. 在 CLI 启动时打一行 status banner，让用户知道 trace 会不会进 dashboard。
 
-If LANGSMITH_API_KEY is unset, everything is a no-op — JSONL tracing via
-TraceWriter still works.
+LANGSMITH_API_KEY 没设时全是 no-op —— TraceWriter 的 JSONL trace 仍然正常工作。
 """
 
 from __future__ import annotations
@@ -24,7 +22,7 @@ import os
 
 
 def is_enabled() -> bool:
-    """True iff LangSmith env vars are configured and the SDK is importable."""
+    """LangSmith env 都齐 + SDK 装上时返回 True。"""
     if not os.getenv("LANGSMITH_API_KEY"):
         return False
     try:
@@ -35,10 +33,10 @@ def is_enabled() -> bool:
 
 
 def status_line() -> str:
-    """One-line status for the CLI banner.
+    """给 CLI banner 用的一行 status。
 
-    Returns "disabled" when the user hasn't set things up, otherwise a string
-    naming the active project so they know where to look in the dashboard.
+    没配置时返回 "disabled"，否则返回当前 project 名（让用户知道去 dashboard
+    哪里看）。
     """
     if not os.getenv("LANGSMITH_API_KEY"):
         return "disabled (set LANGSMITH_TRACING=true + LANGSMITH_API_KEY to enable)"

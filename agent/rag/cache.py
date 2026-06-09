@@ -1,10 +1,10 @@
-"""On-disk embedding cache.
+"""embedding 的磁盘缓存。
 
-Embeddings cost an API call. The seed corpus doesn't change between runs, so
-caching by sha256(model + text) keeps subsequent runs (and tests) free.
+embedding 一次要打一次 API。seed corpus 跨 run 不变，所以按 sha256(model + text)
+缓存能让后续 run 和测试不花钱。
 
-Cache layout: one JSON file per text under cache_dir/. File name is the digest;
-contents are `{"text": ..., "model": ..., "vector": [...]}`.
+cache 布局：每个 text 一个 JSON 文件，放在 cache_dir/ 下。文件名 = digest；
+内容 = `{"text": ..., "model": ..., "vector": [...]}`。
 """
 
 from __future__ import annotations
@@ -20,10 +20,9 @@ def _key(text: str, model: str) -> str:
 
 
 def _model_name(embedder) -> str:
-    """Best-effort: use the embedder's `_model` attr if present, else its class name.
+    """尽力取一个：embedder 有 `_model` attr 就用，否则用类名。
 
-    The mock embedder doesn't have a model name; using the class is enough to
-    keep mock vectors out of a real-API cache.
+    Mock embedder 没 model 名；用类名足够把 mock vector 跟真 API 缓存隔离开。
     """
     return getattr(embedder, "_model", embedder.__class__.__name__)
 
@@ -34,7 +33,7 @@ def cached_embed(
     *,
     cache_dir: Optional[Path] = None,
 ) -> list[list[float]]:
-    """Embed `texts`, hitting the cache when possible. Misses go to embedder.embed."""
+    """embed `texts`，能命中 cache 就命中；miss 的走 embedder.embed。"""
     cache_dir = Path(cache_dir) if cache_dir is not None else Path(".embedding_cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -51,7 +50,7 @@ def cached_embed(
                 out[i] = list(cached["vector"])
                 continue
             except (OSError, json.JSONDecodeError, KeyError):
-                # Treat corrupt cache entries as misses; they'll be overwritten.
+                # 缓存损坏当 miss 处理；后续会被覆盖
                 pass
         misses_idx.append(i)
         misses_text.append(t)

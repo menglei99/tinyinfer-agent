@@ -1,4 +1,4 @@
-"""End-to-end smoke test: run the full graph on a sample diff in mock mode."""
+"""端到端 smoke test：mock 模式下用一份样例 diff 跑完整张 graph。"""
 
 import os
 from pathlib import Path

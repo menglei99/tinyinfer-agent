@@ -1,4 +1,4 @@
-"""Tests for the in-process unified-diff applier used by the fault-injection benchmark."""
+"""fault-injection benchmark 用到的 in-process unified-diff applier 的测试。"""
 
 from __future__ import annotations
 

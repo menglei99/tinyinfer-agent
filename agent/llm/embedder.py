@@ -1,10 +1,10 @@
-"""Embedding client abstraction.
+"""Embedding client 抽象。
 
-Mirrors the LLMClient Protocol shape: a single concrete provider (DashScope's
-text-embedding-v4) plus a deterministic mock for tests / CI / no-key local runs.
+跟 LLMClient Protocol 一样的形状：一个真 provider（DashScope 的
+text-embedding-v4）加一个确定性 mock 给测试 / CI / 没 key 的本地运行。
 
-The DashScope client reuses the same OpenAI-compatible endpoint the chat client
-uses (`DASHSCOPE_BASE_URL`) so a single key drives both LLM and embedding.
+DashScope client 复用 chat client 同一个 OpenAI 兼容 endpoint
+（`DASHSCOPE_BASE_URL`），一份 key 同时驱动 LLM 和 embedding。
 """
 
 from __future__ import annotations
@@ -28,18 +28,17 @@ class EmbeddingClient(Protocol):
     def embed(self, texts: list[str]) -> list[list[float]]: ...
 
 
-# ---------- real provider ----------
+# ---------- 真 provider ----------
 
 
 class DashScopeEmbeddingClient:
-    """Wraps DashScope's OpenAI-compatible embedding endpoint.
+    """封装 DashScope 的 OpenAI 兼容 embedding endpoint。
 
-    Batches input over 25 texts at a time — the public limit at the time of
-    writing. Returns a row of floats per input, in the same order.
+    每 25 条做一批（写代码时的公开上限）。每条输入返回一行 float，顺序跟输入对齐。
     """
 
-    # DashScope text-embedding-v4 caps batch at 10 (verified empirically on
-    # 2026-06-03; older docs claimed 25 but the API rejects > 10 with a 400).
+    # DashScope text-embedding-v4 一批上限 10 条（2026-06-03 实测；老文档说 25
+    # 但 API 超过 10 直接 400）。
     _MAX_BATCH = 10
 
     def __init__(
@@ -61,7 +60,7 @@ class DashScopeEmbeddingClient:
         for i in range(0, len(texts), self._MAX_BATCH):
             batch = texts[i : i + self._MAX_BATCH]
             resp = self._client.embeddings.create(model=self._model, input=batch)
-            # API guarantees order matches input.
+            # API 保证顺序和 input 对齐
             out.extend(item.embedding for item in resp.data)
         return out
 
@@ -70,11 +69,10 @@ class DashScopeEmbeddingClient:
 
 
 class MockEmbeddingClient:
-    """Deterministic per-text vectors. Same text -> same vector across runs.
+    """按 text 给确定性 vector。同样 text -> 跨 run 同样 vector。
 
-    The hash is done with sha256 so the seed is stable across Python process
-    invocations (Python's built-in hash() is randomised by PYTHONHASHSEED and
-    would make tests flaky).
+    用 sha256 做 hash，让 seed 跨 Python 进程稳定（Python 内置 hash() 受
+    PYTHONHASHSEED 随机化影响，会让测试 flaky）。
     """
 
     def __init__(self, dim: int = 1024, seed: int = 0):
@@ -88,7 +86,7 @@ class MockEmbeddingClient:
             seed = int.from_bytes(h[:8], "little", signed=False)
             rng = np.random.default_rng(seed)
             v = rng.standard_normal(self._dim)
-            v = v / (np.linalg.norm(v) + 1e-12)  # L2 normalize -> cosine sim is dot product
+            v = v / (np.linalg.norm(v) + 1e-12)  # L2 normalize -> cosine sim 等于点积
             out.append(v.astype(np.float32).tolist())
         return out
 
@@ -97,17 +95,17 @@ class MockEmbeddingClient:
 
 
 def get_embedding_client() -> EmbeddingClient:
-    """Pick provider from EMBEDDING_PROVIDER env. Falls back to mock when key is absent.
+    """根据 EMBEDDING_PROVIDER env 选 provider。没 key 时 fallback 到 mock。
 
-    Recognised values: "dashscope" / "qwen" -> DashScope; anything else -> mock.
+    认识的值："dashscope" / "qwen" -> DashScope；其他 -> mock。
     """
     provider = (os.getenv("EMBEDDING_PROVIDER", "") or "").lower().strip()
 
     if provider in ("dashscope", "qwen"):
         api_key = os.getenv("DASHSCOPE_API_KEY", "")
         if not api_key:
-            # Caller asked for a real provider but the key is missing — be loud
-            # in dev (env var typo) without breaking CI.
+            # caller 明确要真 provider 但 key 缺了 —— 在 dev 环境响一声（env
+            # 拼错），但别让 CI 挂掉
             return MockEmbeddingClient()
         return DashScopeEmbeddingClient(
             api_key=api_key,

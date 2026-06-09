@@ -1,18 +1,17 @@
-"""Default RAG corpus for tinyinfer-agent.
+"""tinyinfer-agent 的默认 RAG corpus。
 
-Three sources are stitched together into a single Document list:
+三类来源拼成一个 Document 列表：
 
-1. Hand-written ONNX-style operator semantics. We don't import the real ONNX
-   spec text — too long, mostly boilerplate, and the relevant points fit in
-   a few sentences each.
-2. Comments scraped from `tinyinfer/src/*.cpp`. These capture the *why* of the
-   in-tree code; the LLM uses them for grounding when proposing tests.
-3. Past fault-injection rationales — one short string per benchmark seed,
-   describing the kind of bug we want regression tests to catch.
+1. 手写的 ONNX 风格算子语义。我们不导入完整 ONNX 规范文本 —— 太长、大部分
+   是 boilerplate，而真正有用的几句话每条都很短。
+2. 从 `tinyinfer/src/*.cpp` 抽出来的注释。这些保住了 in-tree 代码"为啥"，LLM
+   提议测试时用作 grounding。
+3. 历史 fault-injection 的 rationale —— 每个 benchmark seed 一段短描述，说明
+   想抓什么类型的 bug。
 
-The corpus stays ASCII-only because rank-bm25 tokenises by whitespace; mixing
-in Chinese would silently degrade BM25 recall. Switching to a Chinese tokenizer
-is a future extra (jieba), tracked in DEFERRED_VALIDATION.md.
+corpus 文本**保留 ASCII**（英文），因为 rank-bm25 按空白分词；混入中文会
+silently 让 BM25 召回退化。换中文 tokenizer（jieba）是未来工作，挂在
+DEFERRED_VALIDATION.md 里。
 """
 
 from __future__ import annotations
@@ -62,7 +61,7 @@ _FAULT_INJECTION_RATIONALES: list[tuple[str, str]] = [
 
 
 def _scrape_source_comments(repo_root: Path) -> list[Document]:
-    """Pull short single-line `// ...` comments from tinyinfer/src/*.cpp."""
+    """从 tinyinfer/src/*.cpp 里抓短小的单行 `// ...` 注释。"""
     out: list[Document] = []
     src_dir = repo_root / "tinyinfer" / "src"
     if not src_dir.is_dir():
@@ -75,8 +74,8 @@ def _scrape_source_comments(repo_root: Path) -> list[Document]:
             continue
         for i, m in enumerate(pat.finditer(text)):
             comment = m.group(1).strip()
-            # Skip "AUTO-GENERATED" headers, license boilerplate, and one-token
-            # comments — they have no retrieval signal.
+            # 跳过 "AUTO-GENERATED" 头、license boilerplate、单 token 注释 ——
+            # 它们没有检索信号。
             if not comment or len(comment.split()) < 4:
                 continue
             if comment.lower().startswith(("auto-generated", "do not edit")):
@@ -92,9 +91,9 @@ def _scrape_source_comments(repo_root: Path) -> list[Document]:
 
 
 def load_default_corpus(repo_root: Path | None = None) -> list[Document]:
-    """Build the default seed corpus.
+    """构造默认的 seed corpus。
 
-    repo_root defaults to the tinyinfer-agent repo root inferred from this file.
+    repo_root 不传时根据当前文件位置推断 tinyinfer-agent repo 根。
     """
     if repo_root is None:
         # agent/rag/corpus.py -> agent/rag -> agent -> repo_root

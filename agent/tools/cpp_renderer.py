@@ -1,9 +1,8 @@
-"""Render generated test cases to GTest C++ source files.
+"""把生成的测试 case render 成 GTest C++ 源文件。
 
-We deliberately do NOT ask the LLM to emit raw C++ code for numerical tests —
-the LLM picks shapes / dtypes / edges, but the actual numerical values come
-from the numpy oracle and we template the C++ ourselves. This is the
-"evidence-grounded test generation" story that goes in the devlog.
+故意**不**让 LLM 输出数值测试的原始 C++ —— LLM 选 shape / dtype / edge，但
+真正的数值由 numpy oracle 算出来，C++ 是我们自己 template 出来的。这就是 devlog
+里反复讲的"evidence-grounded test generation"故事。
 """
 
 from __future__ import annotations
@@ -38,14 +37,13 @@ def _fmt_float_array(arr: np.ndarray) -> str:
 
 
 def _fmt_float(v: float) -> str:
-    """Format a single float as a valid C++ literal.
+    """把一个 float 格式化成合法的 C++ literal。
 
-    `f"{v:.7g}f"` is unsafe: integer-valued floats render as e.g. "1f",
-    which C++ rejects (no decimal point or exponent). Force a trailing
-    decimal so the result is always a well-formed float literal.
+    `f"{v:.7g}f"` 不安全：整数值的 float 会渲染成比如 "1f"，C++ 不认（既没小数点
+    也没指数）。这里强制带个小数点，保证结果总是 well-formed 的 float literal。
     """
     s = f"{v:.7g}"
-    if not any(c in s for c in (".", "e", "E", "n", "i")):  # n/i catch nan/inf
+    if not any(c in s for c in (".", "e", "E", "n", "i")):  # n / i 抓 nan / inf
         s = s + ".0"
     return s + "f"
 
@@ -64,16 +62,16 @@ def render_matmul_test(
     rationale: str = "",
     c_init: np.ndarray | None = None,
 ) -> str:
-    # Auto-scale tolerance with output magnitude. fp32 carries ~7 decimal
-    # digits, so we use a 1e-5 relative tolerance with a 1e-4 absolute floor.
+    # 按输出量级自动 scale tolerance。fp32 大约 7 位十进制有效数字，所以用
+    # 1e-5 的相对容差加 1e-4 的绝对地板。
     if tol is None:
         max_abs = float(np.max(np.abs(expected))) if expected.size else 0.0
         tol = max(1e-4, max_abs * 1e-5)
 
     if c_init is None:
-        # Default path: vector-overload API allocates and zeroes c[] internally.
-        # Easy to read; doesn't exercise the API contract that c[] should be
-        # OVERWRITTEN (not accumulated into) by the implementation.
+        # 默认路径：用 vector 重载的 API，c[] 在内部分配并被清零。可读性好，
+        # 但**抓不到** "c[] 应被 OVERWRITE 而不是 accumulate" 这条 API 合约
+        # 类的 bug。
         return f"""\
 TEST({suite}, {case_name}) {{
     // {rationale}
@@ -89,17 +87,16 @@ TEST({suite}, {case_name}) {{
 }}
 """
 
-    # Pointer-API path: caller-owned c[] preloaded with non-zero values.
-    # Catches accumulator-style implementations that read c[i*n+j] as the
-    # initial acc instead of starting from 0.
+    # 指针 API 路径：caller 自己分配 c[] 并预填非零 garbage。能抓住
+    # 把 c[i*n+j] 当成 acc 初值读的 accumulator 类型 bug（benchmark seed 03）。
     return f"""\
 TEST({suite}, {case_name}) {{
     // {rationale}
     std::vector<float> a = {{{_fmt_float_array(a)}}};
     std::vector<float> b = {{{_fmt_float_array(b)}}};
     std::vector<float> expected = {{{_fmt_float_array(expected)}}};
-    // Output buffer prefilled with non-zero garbage. A correct implementation
-    // must overwrite each c[i*n+j], not accumulate into it.
+    // Output buffer 预填非零 garbage。正确实现必须 OVERWRITE 每个 c[i*n+j]，
+    // 不能 accumulate 进去。
     std::vector<float> c = {{{_fmt_float_array(c_init)}}};
 
     ASSERT_TRUE(tinyinfer::matmul_fp32(a.data(), b.data(), c.data(), {m}, {k}, {n}));
@@ -121,9 +118,8 @@ def render_softmax_test(
     tol: float | None = None,
     rationale: str = "",
 ) -> str:
-    # Auto-scale tolerance: softmax outputs live in [0,1] so a tight floor
-    # is fine, but raise it slightly on long reductions where summation
-    # error accumulates.
+    # 自动 scale tolerance：softmax 输出在 [0,1]，所以容差地板可以紧；但 long
+    # reduction 累加误差会涨，长度大时把容差稍微抬高一点。
     if tol is None:
         n_red = int(x.shape[-1]) if x.ndim >= 1 else 1
         tol = max(1e-5, 1e-6 * n_red)
@@ -131,8 +127,8 @@ def render_softmax_test(
     x32 = np.asarray(x, dtype=np.float32)
     exp32 = np.asarray(expected, dtype=np.float32)
 
-    # The C++ op is 1D; for batched (2D) inputs we loop over rows so each
-    # call exercises softmax_fp32 on one row of length cols.
+    # C++ op 是 1D；batched (2D) input 时按 row 循环，每次 call 对一行 cols
+    # 调用 softmax_fp32。
     if x32.ndim <= 1:
         rows, cols = 1, int(x32.size)
     else:

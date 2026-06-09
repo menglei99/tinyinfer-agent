@@ -1,7 +1,7 @@
-"""LangGraph nodes.
+"""LangGraph 节点。
 
-Each node takes the current AgentState and returns a partial state update.
-Keep them small, side-effect-light, and individually testable.
+每个节点拿当前 AgentState、返回一个 partial state update。保持小、副作用少、
+单独可测试。
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from agent.state import (
 
 # ---------- parse_diff ----------
 
-# Files we care about. Diff hunks elsewhere are ignored.
+# 我们关心的文件。别的 hunk 直接忽略。
 _OP_FILE_RE = re.compile(
     r"^\+\+\+ b/(?P<path>tinyinfer/(src|include/tinyinfer)/(?P<stem>[a-zA-Z0-9_]+)\.(cpp|hpp))",
     re.MULTILINE,
@@ -51,15 +51,15 @@ def parse_diff_node(state: AgentState, llm: LLMClient | None = None) -> dict[str
                 summary="modification detected by static diff parse",
             )
 
-    # If regex found nothing, optionally consult LLM (skipped here for determinism).
+    # regex 没找到时也可以选择问 LLM（这里保留确定性，不调）
     return {"changed_ops": list(seen.values())}
 
 
 # ---------- route_skill ----------
 
 
-# Keyword sets used by the routing heuristic. Keep these short and high-signal —
-# anything ambiguous (e.g. "loop") would route everything to everything.
+# 路由启发式用的关键词集。保持短而高信号——任何模糊词（比如 "loop"）会把所有
+# 东西都路由到所有 skill。
 _PERF_KEYWORDS = (
     "simd", "vectorise", "vectorize", "unroll", "tile", "blocked",
     "fastpath", "fast path", "cache", "loop reorder",
@@ -76,16 +76,16 @@ _MEMORY_KEYWORDS = (
 
 
 def _detect_skills_from_diff(diff: str) -> list[SkillKind]:
-    """Heuristic: scan the +-prefixed diff lines for skill-trigger keywords.
+    """启发式：扫 diff 里 +/- 行有没有触发 skill 的关键词。
 
-    NUMERICAL is always on — correctness is the floor. PERF / MEMORY are
-    additive based on what the diff actually touches.
+    NUMERICAL 始终开着 —— 正确性是底线。PERF / MEMORY 按 diff 实际触及的内容
+    增量加上。
     """
     skills: list[SkillKind] = [SkillKind.NUMERICAL]
     if not diff:
         return skills
 
-    # Only consider added/removed code, not the surrounding context.
+    # 只看新加 / 删掉的代码，不看周围 context
     plus_lines = [
         ln.lower()
         for ln in diff.splitlines()
@@ -101,11 +101,10 @@ def _detect_skills_from_diff(diff: str) -> list[SkillKind]:
 
 
 def route_skill_node(state: AgentState) -> dict[str, Any]:
-    """Pick which Skills to run for the changed ops.
+    """选给改动的算子跑哪些 Skill。
 
-    Always routes to NUMERICAL. PERF / MEMORY are added when the diff
-    body contains skill-relevant keywords (eg. SIMD intrinsics → perf,
-    allocator changes → memory).
+    始终路由到 NUMERICAL。当 diff body 里含 skill 相关关键词时再加 PERF / MEMORY
+    （比如 SIMD intrinsic → perf，allocator 改动 → memory）。
     """
     diff = state.get("diff", "") or ""
     return {"selected_skills": _detect_skills_from_diff(diff)}
@@ -115,14 +114,12 @@ def route_skill_node(state: AgentState) -> dict[str, Any]:
 
 
 def retrieve_context_node(state: AgentState, retriever=None) -> dict[str, Any]:
-    """Pull a few relevant corpus docs to ground the rest of the pipeline.
+    """拉几条相关的 corpus 文档给 pipeline 剩下的步骤当 ground。
 
-    The retriever is supplied by the graph builder via partial(); it can be
-    None (RAG disabled or build failed) — in which case we return an empty list
-    and downstream nodes degrade gracefully.
+    retriever 由 graph builder 通过 partial() 注入；可以是 None（RAG 关了或者
+    build 失败）—— 这种情况返回空 list，下游节点会优雅 degrade。
 
-    The query is built from changed_ops names and summaries — small, focused,
-    and cheap to embed.
+    query 用 changed_ops 的名字 + summary 拼出来 —— 短、聚焦、embed 便宜。
     """
     if retriever is None:
         return {"retrieved_docs": []}
@@ -131,9 +128,8 @@ def retrieve_context_node(state: AgentState, retriever=None) -> dict[str, Any]:
     if not ops:
         return {"retrieved_docs": []}
 
-    # Build one query string per pipeline run. The op summary is short ("modification
-    # detected by static diff parse") so we mainly rely on the op name and the
-    # diff body's first 400 characters as a topical hint.
+    # 每次 pipeline 跑构造一条 query。op summary 短（"modification detected by
+    # static diff parse"）所以主要靠 op 名字加 diff body 前 400 字符当 topical hint。
     parts: list[str] = []
     for op in ops:
         parts.append(op.name)
@@ -146,7 +142,7 @@ def retrieve_context_node(state: AgentState, retriever=None) -> dict[str, Any]:
 
     try:
         hits = retriever.retrieve(query, top_k=5)
-    except Exception as exc:  # never fail the pipeline because of RAG
+    except Exception as exc:  # RAG 任何失败都不让 pipeline 挂
         return {"retrieved_docs": [], "error": f"retrieve_context: {exc}"}
 
     return {"retrieved_docs": [h.to_dict() for h in hits]}
@@ -161,9 +157,8 @@ def generate_tests_node(state: AgentState, llm: LLMClient | None = None) -> dict
     existing = state.get("generated_tests", []) or []
     lessons = state.get("reflexion_lessons") or []
 
-    # Dedup against earlier critic-loop iterations: keep only test names we
-    # haven't already produced for the same op. Without this the
-    # list-concat reducer accumulates duplicates across iterations.
+    # 跟前几轮 critic loop 的输出去重：只保留同一 op 下还没产生过的 test 名字。
+    # 不这么做的话 list-concat reducer 会跨迭代累积重复 case。
     seen_keys: set[tuple[str, str]] = {(t.op_name, t.test_name) for t in existing}
 
     new_tests: list = []
@@ -186,10 +181,10 @@ def generate_tests_node(state: AgentState, llm: LLMClient | None = None) -> dict
 # ---------- critic ----------
 
 _CRITIC_SYSTEM = """\
-You are a strict reviewer of AI inference framework regression tests.
-Verify that the proposed test set covers: shape variety (square/rectangular/m=1),
-edge shapes, and numerical-stability cases when applicable.
-Respond ONLY with JSON: {"passed": bool, "missing_dimensions": [str,...], "feedback": str}
+你是一个严格的 AI 推理框架回归测试 reviewer。
+验证提议的 test 集是否覆盖：shape 多样性（square/rectangular/m=1）、
+edge shape、以及在适用时的数值稳定性 case。
+只返回 JSON：{"passed": bool, "missing_dimensions": [str,...], "feedback": str}
 """
 
 
@@ -199,9 +194,8 @@ def critic_node(state: AgentState, llm: LLMClient | None = None) -> dict[str, An
     docs = state.get("retrieved_docs") or []
 
     def _result(verdict: CriticVerdict) -> dict[str, Any]:
-        """Pack the critic update, including a Reflexion lesson when the
-        verdict failed (so the next generate_tests iteration knows what to
-        target). The lesson reducer concats across iterations.
+        """打包 critic update；verdict 失败时附带一条 Reflexion lesson
+        （让下一轮 generate_tests 知道往哪个方向找）。lesson reducer 跨迭代 concat。
         """
         out: dict[str, Any] = {
             "critic_verdict": verdict,
@@ -222,7 +216,7 @@ def critic_node(state: AgentState, llm: LLMClient | None = None) -> dict[str, An
         )
         return _result(verdict)
 
-    # Deterministic structural check first — cheap and reliable.
+    # 先跑确定性的结构 check —— 便宜可靠
     structural = _structural_critic(tests)
     base_report = _build_coverage_report(
         tests, structural.missing_dimensions, docs, structural_pass=structural.passed
@@ -232,16 +226,15 @@ def critic_node(state: AgentState, llm: LLMClient | None = None) -> dict[str, An
         structural.coverage_report = base_report
         return _result(structural)
 
-    # Optional LLM critic on top of structural pass.
+    # 结构 PASS 后再跑可选的 LLM critic
     if llm is None:
         structural.coverage_report = base_report
         return _result(structural)
 
     try:
         summary = "\n".join(f"- {t.op_name}::{t.test_name} ({t.rationale})" for t in tests)
-        # Inject retrieved corpus snippets as grounding for the critic. We cap
-        # at top-3 to keep prompt size in check; the retriever already returned
-        # them ranked.
+        # 把检索到的 corpus 片段当 grounding 喂给 critic。最多 top-3，控制 prompt
+        # 长度；retriever 已经排序好了。
         rag_block = ""
         if docs:
             top = docs[:3]
@@ -276,17 +269,16 @@ def critic_node(state: AgentState, llm: LLMClient | None = None) -> dict[str, An
 
 
 def _reflexion_enabled() -> bool:
-    """True unless REFLEXION env var is explicitly off (default: on)."""
+    """REFLEXION env 显式 off 时返回 False，默认 on。"""
     v = (os.getenv("REFLEXION", "on") or "on").lower().strip()
     return v not in ("0", "false", "off", "no")
 
 
 def _build_reflexion_lesson(iteration: int, verdict: CriticVerdict) -> str:
-    """Human-readable lesson string for the next generator pass.
+    """给下一轮 generator 一条 human-readable lesson 字符串。
 
-    The generator prepends these to its planner prompt. Keep the format
-    consistent — the LLM does much better with a structured "Lesson #N:"
-    prefix than with raw missing-dimension lists.
+    generator 会把这些 prepend 到 planner prompt 前面。格式要一致 —— LLM 对
+    带 "Lesson #N:" 前缀的结构化反馈反应明显比裸 missing-dimension list 好。
     """
     parts: list[str] = [f"Lesson #{iteration}:"]
     missing = [m for m in (verdict.missing_dimensions or []) if m]
@@ -295,7 +287,7 @@ def _build_reflexion_lesson(iteration: int, verdict: CriticVerdict) -> str:
     if verdict.feedback:
         parts.append("Feedback: " + verdict.feedback.strip())
     if len(parts) == 1:
-        # Don't emit empty lessons.
+        # 不发空 lesson
         return ""
     return " ".join(parts)
 
@@ -307,12 +299,11 @@ def _build_coverage_report(
     *,
     structural_pass: bool,
 ) -> dict[str, Any]:
-    """Open-schema dict for the critic verdict's coverage_report field.
+    """critic verdict 的 coverage_report 字段，schema 开放的 dict。
 
-    Captures: how many (op, skill) groups were scored, total / missing
-    dimensions, how many corpus docs were used to ground the LLM critic, and
-    the per-skill miss list — useful for the report renderer + downstream
-    metrics.
+    抓取：评分覆盖了多少 (op, skill) 组、total / missing 维度数、grounding LLM
+    critic 用了多少 corpus 文档、per-skill 的 miss 列表 —— 这些都给 report
+    renderer 和下游指标用。
     """
     groups: dict[tuple, list] = {}
     for t in tests:
@@ -320,7 +311,7 @@ def _build_coverage_report(
 
     per_skill: dict[str, list[str]] = {}
     for entry in missing:
-        # entry shape from _structural_critic: "op_name/skill_value:dim_name"
+        # _structural_critic 出来的 entry 形如 "op_name/skill_value:dim_name"
         parts = entry.split(":", 1)
         if len(parts) == 2:
             per_skill.setdefault(parts[0], []).append(parts[1])
@@ -338,12 +329,11 @@ def _build_coverage_report(
 
 
 def _structural_critic(tests: list) -> CriticVerdict:
-    """Rule-based critic: verify the test set covers the basic dimensions.
+    """规则式 critic：验证测试集是否覆盖基础维度。
 
-    Cheap, deterministic, and the foundation an LLM critic builds on. We
-    dispatch per (op, skill) group so each combination owns a small set of
-    dimensions appropriate to it — matmul/numerical asks for shape variety,
-    perf asks for an aligned case, memory asks for a guard-band case, etc.
+    便宜、确定性，是 LLM critic 的地基。按 (op, skill) 分组 dispatch，每个组合
+    管自己那一小撮维度 —— matmul/numerical 要 shape 多样性，perf 要一个 aligned
+    case，memory 要一个 guard-band case，依此类推。
     """
     if not tests:
         return CriticVerdict(
@@ -376,7 +366,7 @@ def _structural_critic(tests: list) -> CriticVerdict:
 
 
 def _coverage_misses(op_name: str, skill: SkillKind, names_lower: list[str]) -> list[str]:
-    """Return the list of missing coverage dimensions for one (op, skill) group."""
+    """返回一个 (op, skill) 组里缺失的覆盖维度。"""
 
     def any_tag(*tags: str) -> bool:
         return any(any(t in n for t in tags) for n in names_lower)
@@ -430,21 +420,21 @@ def _coverage_misses(op_name: str, skill: SkillKind, names_lower: list[str]) -> 
 
 
 def _project_test_dir() -> Path:
-    """Where cmake's tests/test_*.cpp glob looks. Overridable via env var."""
+    """cmake 的 tests/test_*.cpp glob 找的目录。可以用 env 覆盖。"""
     override = os.getenv("TINYINFER_PROJECT_DIR")
     base = Path(override) if override else Path("tinyinfer")
     return base / "tests"
 
 
 def install_tests_node(state: AgentState) -> dict[str, Any]:
-    """Copy generated cpp into the C++ project's tests/ directory.
+    """把生成的 cpp 拷到 C++ 项目的 tests/ 目录下。
 
-    cmake's file(GLOB) is evaluated at configure time, so dropping new files
-    here is enough — execute_tests_node will re-configure before building.
+    cmake 的 file(GLOB) 在 configure 时评估，所以新文件落在这里就够 ——
+    execute_tests_node 会在 build 前重 configure。
 
-    Tests are grouped by (op_name, file_suffix). A per-skill suffix lets one
-    op land multiple files (eg. test_matmul_fp32_generated.cpp +
-    test_matmul_fp32_perf_generated.cpp) without overwriting each other.
+    测试按 (op_name, file_suffix) 分组。per-skill 的 suffix 让同一个 op
+    可以落多个文件（例如 test_matmul_fp32_generated.cpp +
+    test_matmul_fp32_perf_generated.cpp）而不互相覆盖。
     """
     tests = state.get("generated_tests", []) or []
     if not tests:
@@ -476,21 +466,20 @@ def install_tests_node(state: AgentState) -> dict[str, Any]:
 
 
 def execute_tests_node(state: AgentState) -> dict[str, Any]:
-    """Drive cmake configure/build/ctest through the MCP server.
+    """通过 MCP server 驱动 cmake configure/build/ctest。
 
-    Going through MCP (not a direct cmake_driver call) is the point: the
-    same protocol is consumed by Claude Desktop / Cursor, so the agent is
-    not the only entry point to the toolchain.
+    走 MCP 而不是直接 call cmake_driver 是关键：同一套协议同时被 Claude Desktop
+    / Cursor 用，agent 不是 toolchain 的唯一入口。
 
-    On hosts without cmake we record a SKIPPED ExecutionResult instead of
-    failing — partial pipelines are more useful than red ones.
+    宿主没 cmake 时记一条 SKIPPED 的 ExecutionResult 而不是 fail —— 部分 pipeline
+    总比全红 pipeline 有用。
     """
-    from agent.mcp.client import call_tools  # local import: optional dep at run time
+    from agent.mcp.client import call_tools  # 本地 import：runtime 才需要的可选依赖
 
     project = os.getenv("TINYINFER_PROJECT_DIR", "tinyinfer")
     build = os.getenv("TINYINFER_BUILD_DIR", "tinyinfer/build")
 
-    # Probe first; if no cmake, return a skipped result and let the report explain.
+    # 先 probe；没 cmake 就返回 skipped 让 report 解释清楚
     probe = call_tools([("cmake_available", {})])
     if not probe or not probe[0].payload.get("available"):
         payload = probe[0].payload if probe else {}
@@ -572,9 +561,8 @@ def write_report_node(state: AgentState) -> dict[str, Any]:
     lines.append("# tinyinfer-agent — regression test report\n")
     lines.append(f"Trace ID: `{state.get('trace_id', 'n/a')}`\n")
 
-    # Loud banner if the critic exited unsatisfied. We still emit the file
-    # (better partial coverage than no coverage), but the human reviewer
-    # must see this before they commit.
+    # critic 没满意时打个大横幅。文件仍然落盘（部分覆盖比没覆盖好），
+    # 但人来 review 时必须看到这个 banner 才能 commit。
     if critic is not None and not critic.passed:
         lines.append("> [!WARNING]")
         lines.append(f"> **Critic did NOT pass after {iters} iteration(s).**")

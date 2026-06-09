@@ -1,4 +1,4 @@
-"""Smoke tests for perf and memory skills."""
+"""perf / memory skill 的 smoke 测试。"""
 
 from agent.skills import get_skill
 from agent.state import ChangedOp, SkillKind

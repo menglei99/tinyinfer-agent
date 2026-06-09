@@ -1,8 +1,7 @@
-"""LLM client abstraction.
+"""LLM client 抽象。
 
-Supports DeepSeek / OpenAI / Anthropic (optional) / Mock.
-Mock mode lets you run the full graph without any API key — useful for tests
-and for demoing the project end-to-end.
+支持 DeepSeek / OpenAI / Anthropic（可选）/ Mock。
+Mock 模式让你在没 API key 时跑通整张 graph —— 测试和 demo 端到端时很有用。
 """
 
 from __future__ import annotations
@@ -18,12 +17,12 @@ load_dotenv()
 
 
 def _maybe_wrap_for_langsmith(openai_client):
-    """Return the openai client wrapped for LangSmith span capture, or as-is.
+    """同时满足两个条件时，把 openai client 包成 LangSmith span 捕获模式；
+    否则原样返回。
 
-    Wraps only when both:
-      - the `langsmith` package is importable, AND
-      - `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` are set.
-    Failures here are silent — observability must never break the pipeline.
+      - `langsmith` 包能 import；AND
+      - `LANGSMITH_TRACING=true` 且 `LANGSMITH_API_KEY` 已设。
+    这里任何失败都静默 —— observability 绝不能让 pipeline 挂掉。
     """
     if not os.getenv("LANGSMITH_API_KEY"):
         return openai_client
@@ -47,24 +46,23 @@ class LLMClient(Protocol):
     def complete(self, system: str, user: str, *, json_mode: bool = False) -> LLMResponse: ...
 
 
-# ---------- real providers ----------
+# ---------- 真 provider ----------
 
 
 class OpenAICompatibleClient:
-    """Works for OpenAI, DeepSeek, and any OpenAI-compatible endpoint."""
+    """适用于 OpenAI、DeepSeek 和任意 OpenAI 兼容 endpoint。"""
 
     def __init__(self, *, api_key: str, base_url: Optional[str], model: str):
-        # Lazy import: avoid hard dep if user picks mock.
+        # 懒 import：避免用户选 mock 时强依赖 openai
         from openai import OpenAI
 
         kwargs = {"api_key": api_key}
         if base_url:
             kwargs["base_url"] = base_url
         client = OpenAI(**kwargs)
-        # If LangSmith is configured, wrap the client so chat completions appear
-        # as proper LLM spans (with prompt + response + token counts) in the
-        # LangSmith dashboard. No-op when langsmith isn't installed or the
-        # tracing env vars aren't set.
+        # 如果 LangSmith 配上了，把 client 包一下，chat completion 就会以正经
+        # LLM span（含 prompt / response / token count）出现在 LangSmith dashboard。
+        # langsmith 没装或 tracing env 没设时是 no-op。
         self._client = _maybe_wrap_for_langsmith(client)
         self._model = model
 
@@ -80,9 +78,8 @@ class OpenAICompatibleClient:
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
 
-        # Retry transient connection errors. DashScope (and other endpoints)
-        # occasionally drop a connection mid-batch; without retry a single
-        # blip kills a 30-minute benchmark run.
+        # 对 transient 连接错误做 retry。DashScope（和其他 endpoint）偶尔会
+        # 在中途掐连接；没有 retry 的话一次抖动就毁掉 30 min 的 benchmark。
         import time
 
         last_exc: Exception | None = None
@@ -95,8 +92,8 @@ class OpenAICompatibleClient:
                     raw=resp.model_dump() if hasattr(resp, "model_dump") else None,
                 )
             except Exception as exc:
-                # Only retry on connection-flavoured errors; surface 4xx/auth
-                # immediately so misconfigurations don't quietly burn quota.
+                # 只对连接类错误 retry；4xx / 鉴权错误立刻 surface，防止配置错误
+                # 静默烧 quota。
                 name = type(exc).__name__
                 if name not in (
                     "APIConnectionError",
@@ -123,9 +120,9 @@ class AnthropicClient:
         self._model = model
 
     def complete(self, system: str, user: str, *, json_mode: bool = False) -> LLMResponse:
-        # Anthropic has no native json_mode; instruct via prompt.
+        # Anthropic 没有原生 json_mode；在 prompt 里嘱咐一下
         if json_mode:
-            user = user + "\n\nRespond with a single JSON object. No prose, no code fences."
+            user = user + "\n\n只用一个 JSON object 回答。不要散文，不要 code fence。"
         resp = self._client.messages.create(
             model=self._model,
             max_tokens=4096,
@@ -140,10 +137,10 @@ class AnthropicClient:
 
 
 class MockClient:
-    """Deterministic scripted responses keyed by content fingerprint.
+    """按内容指纹返回确定性脚本响应。
 
-    The mock recognises a small set of intents and returns plausible structured
-    output. Sufficient to walk the full graph without hitting an API.
+    mock 认得几种 intent，返回看起来合理的结构化输出。够让完整 graph 跑起来，
+    不需要打 API。
     """
 
     def complete(self, system: str, user: str, *, json_mode: bool = False) -> LLMResponse:
@@ -176,8 +173,8 @@ class MockClient:
             )
 
         if "generate" in text_l and "test" in text_l:
-            # Return a placeholder GTest body; the numerical skill builds the
-            # real test file deterministically from numpy oracle anyway.
+            # 返回一个占位 GTest body；numerical skill 反正会基于 numpy oracle
+            # 确定性地构造真正的测试文件。
             return LLMResponse(
                 text=json.dumps(
                     {

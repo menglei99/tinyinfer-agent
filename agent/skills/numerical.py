@@ -1,17 +1,16 @@
-"""Numerical correctness skill.
+"""数值正确性 skill。
 
-Strategy:
-  1. Ask the LLM for shape variety it considers useful.
-  2. Fall back to hand-curated shape cases when the LLM is unsure or in mock mode.
-  3. Compute reference outputs via numpy oracle (deterministic).
-  4. Render GTest C++ source with embedded inputs + expected outputs.
+策略：
+  1. 问 LLM 它觉得有用的 shape variety。
+  2. LLM 不确定或者 mock 模式时 fallback 到手写的 shape case。
+  3. 用 numpy oracle 算 reference output（确定性）。
+  4. render GTest C++ 源码，把 input + expected output 嵌进去。
 
-The LLM picks the *shapes*. The oracle decides the *values*. This split is
-what makes generated tests trustworthy.
+LLM 选 *shape*，oracle 决定 *value*。这个 split 是生成测试可信的关键。
 
-Self-consistency (opt-in via SELF_CONSISTENCY_N env): draw N independent shape
-plans from the LLM and majority-vote the survivors. Trades latency/$ for
-robustness against a single hallucinated outlier.
+Self-consistency（通过 SELF_CONSISTENCY_N env opt-in）：从 LLM 抽 N 份独立的
+shape plan，多数投票留下幸存的。用延迟 / 钱换"对单个 hallucinate outlier 的
+鲁棒性"。
 """
 
 from __future__ import annotations
@@ -31,11 +30,11 @@ from agent.tools import cpp_renderer, oracle
 
 
 _SHAPE_PLANNER_SYSTEM = """\
-You are a senior inference-framework test engineer. Given a changed operator,
-propose a list of input shapes that maximise regression coverage.
-Cover: smallest non-trivial, asymmetric shapes, m=1 / n=1 thin paths, larger
-batch, and any numerical edge cases relevant to this operator.
-Respond ONLY with JSON of the form: {"shapes": [{...}, {...}]} — schema follows the operator.
+你是资深的推理框架测试工程师。给定一个改动过的算子，请提议一组让回归覆盖
+最大的输入 shape。
+覆盖：最小非平凡 shape、非对称 shape、m=1 / n=1 的 thin path、更大的 batch、
+以及和该算子相关的数值边界 case。
+只用 JSON 回答：{"shapes": [{...}, {...}]} —— schema 跟着具体的算子。
 """
 
 
@@ -43,8 +42,11 @@ def _shape_planner_user(op_name: str) -> str:
     if op_name == "matmul_fp32":
         return (
             "Operator: matmul_fp32 (row-major fp32 GEMM, C[M,N] = A[M,K] * B[K,N])\n"
-            "Schema per shape: {\"m\": int, \"k\": int, \"n\": int}\n"
-            "Propose 4-6 shapes."
+            "Schema per shape: {\"m\": int, \"k\": int, \"n\": int, \"c_init\": [float,...] (可选)}\n"
+            "其中 \"c_init\" 是可选字段，长度必须等于 m*n。设上之后我们会用 caller-owned "
+            "c[] 预填这些值再调 pointer API——专门测 API 合约 / accumulator-mode 类 bug。\n"
+            "Propose 4-6 shapes。如果你判断要测 output buffer 初值、aliasing、stride、NaN "
+            "等非 shape 维度，请把对应 case 用 c_init 表达。"
         )
     if op_name == "softmax_fp32":
         return (
@@ -68,13 +70,12 @@ class NumericalSkill(Skill):
     ):
         self.llm = llm
         self.rng = np.random.default_rng(rng_seed)
-        # Reflexion lessons accumulated by previous critic loops in this run.
-        # The generator prepends them to the LLM planner prompt so the LLM
-        # can target the gaps the critic just complained about.
+        # 本轮 critic loop 累积下来的 Reflexion lesson。generator 把这些 prepend
+        # 到 LLM planner prompt 上，让 LLM 针对上一轮 critic 抱怨的 gap 重新 plan。
         self._lessons: list[str] = list(lessons or [])
-        # Self-consistency: number of independent LLM shape-plans to draw and
-        # majority-vote over. 0/1 -> no SC (single call). >=2 -> N draws,
-        # keep shapes that appear in >= ceil(N/2) draws.
+        # Self-consistency：抽多少份独立 LLM shape-plan 然后多数投票。
+        # 0/1 -> 不开 SC（单次 call）；>=2 -> N 次抽样，留下出现 >= ceil(N/2)
+        # 次的 shape。能扛单次 hallucinate outlier。
         try:
             self._sc_n = max(0, int(os.getenv("SELF_CONSISTENCY_N", "0")))
         except ValueError:
@@ -84,26 +85,25 @@ class NumericalSkill(Skill):
         return ["shape_variety", "edge_shape", "numerical_stability"]
 
     def _plan_shapes(self, op_name: str) -> list[dict]:
-        """Ask LLM for shapes; fall back to defaults on parse failure.
+        """问 LLM 拿 shape；解析失败就 fallback 到 default。
 
-        With SELF_CONSISTENCY_N >= 2, we sample N independent plans and keep
-        only shapes (matched by tuple key) that appear in at least majority of
-        plans. Robust to a single hallucinated outlier.
+        SELF_CONSISTENCY_N >= 2 时抽 N 份独立 plan，只保留（tuple key 相等的）
+        在多数 plan 都出现过的 shape。能扛单次 hallucinate outlier。
 
-        When `self._lessons` is non-empty, those reflexion lessons are
-        prepended to the user prompt — the LLM is told what the critic
-        complained about last round so the next plan can target the gap.
+        `self._lessons` 非空时，这些 reflexion lesson 会被 prepend 到 user
+        prompt 上 —— 等于告诉 LLM 上一轮 critic 抱怨了啥，让下一轮 plan 针对
+        那个 gap。
         """
         if self.llm is None:
             return []
 
         n_draws = self._sc_n if self._sc_n >= 2 else 1
         all_shapes: list[dict] = []
-        # Build the lesson preamble once per call. Format:
+        # 每次 call 构造一次 lesson preamble。格式：
         #     Lessons from prior iterations:
         #     - Lesson #1: ...
         #     - Lesson #2: ...
-        # Empty when lessons list is empty -> caller behaviour unchanged.
+        # lesson 列表为空时这块也为空 -> caller 行为不变。
         lesson_block = ""
         if self._lessons:
             lines = "\n".join(f"- {ln}" for ln in self._lessons)
@@ -151,8 +151,7 @@ class NumericalSkill(Skill):
 
     def _generate_matmul(self, op: ChangedOp) -> list[TestCase]:
         planned = self._plan_shapes(op.name)
-        # Always include the hand-curated baseline cases — guarantees coverage
-        # even when the LLM hallucinates.
+        # 始终带上手工默认 cases —— LLM 出幻觉也能保底覆盖。
         shape_cases = oracle.default_shape_cases(op.name, rng=self.rng)
 
         for s in planned:
@@ -162,15 +161,30 @@ class NumericalSkill(Skill):
                 continue
             if m <= 0 or k <= 0 or n <= 0 or m * k * n > 4096:
                 continue
+            # LLM 可选地提议 c_init（长度 m*n 的 list[float]）来测 API 合约
+            # / accumulator-mode 类 bug。校验长度，类型错就丢掉这个 case。
+            llm_c_init = s.get("c_init")
+            extra_inputs: dict = {}
+            name_suffix = ""
+            if isinstance(llm_c_init, list) and len(llm_c_init) == m * n:
+                try:
+                    extra_inputs["c_init"] = [float(v) for v in llm_c_init]
+                    name_suffix = "_cinit"
+                except (TypeError, ValueError):
+                    pass
             shape_cases.append(
                 oracle.ShapeCase(
-                    name=f"llm_{m}x{k}_{k}x{n}",
+                    name=f"llm_{m}x{k}_{k}x{n}{name_suffix}",
                     inputs={
                         "a": self.rng.standard_normal((m, k)).tolist(),
                         "b": self.rng.standard_normal((k, n)).tolist(),
                         "m": m, "k": k, "n": n,
+                        **extra_inputs,
                     },
-                    rationale="LLM-proposed shape",
+                    rationale=(
+                        "LLM-proposed shape, preloaded c[] (output-buffer-init dim)"
+                        if "c_init" in extra_inputs else "LLM-proposed shape"
+                    ),
                 )
             )
 

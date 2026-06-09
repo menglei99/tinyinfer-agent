@@ -1,0 +1,214 @@
+{
+  "total": 10,
+  "caught": 10,
+  "accuracy": 1.0,
+  "results": [
+    {
+      "seed": "01_matmul_offbyone_inner.diff",
+      "op": "matmul_fp32",
+      "tests_generated": 14,
+      "skills_used": [
+        "numerical"
+      ],
+      "fault_likely_caught": true,
+      "detail": "hit on keyword 'k1' (real oracle unavailable: clean_build_failed:          |\n      |                                                   <brace-enclosed initializer list>\ngmake[2]: *** [CMakeFiles/test_matmul_fp32_generated.dir/build.make:76: CMakeFiles/test_matmul_fp32_generated.dir/tests/test_matmul_fp32_generated.cpp.o] Error 1\ngmake[1]: *** [CMakeFiles/Makefile2:266: CMakeFiles/test_matmul_fp32_generated.dir/all] Error 2\ngmake: *** [Makefile:146: all] Error 2\n)",
+      "critic_passed": false,
+      "critic_iterations": 2,
+      "critic_missing_count": 1,
+      "context_docs_used": 5,
+      "oracle_mode": "real_fallback_heuristic",
+      "build_status": "skipped",
+      "failed_test_names": [],
+      "oracle_reflexion_used": false,
+      "attempts": 1
+    },
+    {
+      "seed": "02_matmul_swapped_indices.diff",
+      "op": "matmul_fp32",
+      "tests_generated": 18,
+      "skills_used": [
+        "numerical"
+      ],
+      "fault_likely_caught": true,
+      "detail": "hit on keyword 'rect' (real oracle unavailable: clean_build_failed:          |\n      |                                                   <brace-enclosed initializer list>\ngmake[2]: *** [CMakeFiles/test_matmul_fp32_generated.dir/build.make:76: CMakeFiles/test_matmul_fp32_generated.dir/tests/test_matmul_fp32_generated.cpp.o] Error 1\ngmake[1]: *** [CMakeFiles/Makefile2:266: CMakeFiles/test_matmul_fp32_generated.dir/all] Error 2\ngmake: *** [Makefile:146: all] Error 2\n)",
+      "critic_passed": false,
+      "critic_iterations": 2,
+      "critic_missing_count": 1,
+      "context_docs_used": 5,
+      "oracle_mode": "real_fallback_heuristic",
+      "build_status": "skipped",
+      "failed_test_names": [],
+      "oracle_reflexion_used": false,
+      "attempts": 1
+    },
+    {
+      "seed": "03_matmul_uninit_accumulator.diff",
+      "op": "matmul_fp32",
+      "tests_generated": 17,
+      "skills_used": [
+        "numerical"
+      ],
+      "fault_likely_caught": true,
+      "detail": "failed tests: test_matmul_fp32_generated",
+      "critic_passed": false,
+      "critic_iterations": 2,
+      "critic_missing_count": 1,
+      "context_docs_used": 5,
+      "oracle_mode": "real",
+      "build_status": "ok",
+      "failed_test_names": [
+        "test_matmul_fp32_generated"
+      ],
+      "oracle_reflexion_used": false,
+      "attempts": 1
+    },
+    {
+      "seed": "04_matmul_fp16_accumulator.diff",
+      "op": "matmul_fp32",
+      "tests_generated": 18,
+      "skills_used": [
+        "numerical"
+      ],
+      "fault_likely_caught": true,
+      "detail": "failed tests: test_matmul_fp32_generated, test_matmul_fp32_perf_generated",
+      "critic_passed": false,
+      "critic_iterations": 2,
+      "critic_missing_count": 1,
+      "context_docs_used": 5,
+      "oracle_mode": "real",
+      "build_status": "ok",
+      "failed_test_names": [
+        "test_matmul_fp32_generated",
+        "test_matmul_fp32_perf_generated"
+      ],
+      "oracle_reflexion_used": false,
+      "attempts": 1
+    },
+    {
+      "seed": "05_softmax_missing_max_subtract.diff",
+      "op": "softmax_fp32",
+      "tests_generated": 6,
+      "skills_used": [
+        "numerical"
+      ],
+      "fault_likely_caught": true,
+      "detail": "failed tests: test_softmax_fp32_generated",
+      "critic_passed": false,
+      "critic_iterations": 2,
+      "critic_missing_count": 2,
+      "context_docs_used": 5,
+      "oracle_mode": "real",
+      "build_status": "ok",
+      "failed_test_names": [
+        "test_softmax_fp32_generated"
+      ],
+      "oracle_reflexion_used": false,
+      "attempts": 1
+    },
+    {
+      "seed": "06_softmax_wrong_normalize.diff",
+      "op": "softmax_fp32",
+      "tests_generated": 6,
+      "skills_used": [
+        "numerical"
+      ],
+      "fault_likely_caught": true,
+      "detail": "failed tests: test_softmax_fp32_generated",
+      "critic_passed": false,
+      "critic_iterations": 2,
+      "critic_missing_count": 2,
+      "context_docs_used": 5,
+      "oracle_mode": "real",
+      "build_status": "ok",
+      "failed_test_names": [
+        "test_softmax_fp32_generated"
+      ],
+      "oracle_reflexion_used": false,
+      "attempts": 1
+    },
+    {
+      "seed": "07_softmax_exp_before_subtract.diff",
+      "op": "softmax_fp32",
+      "tests_generated": 6,
+      "skills_used": [
+        "numerical"
+      ],
+      "fault_likely_caught": true,
+      "detail": "failed tests: test_softmax_fp32_generated",
+      "critic_passed": false,
+      "critic_iterations": 2,
+      "critic_missing_count": 2,
+      "context_docs_used": 5,
+      "oracle_mode": "real",
+      "build_status": "ok",
+      "failed_test_names": [
+        "test_softmax_fp32_generated"
+      ],
+      "oracle_reflexion_used": false,
+      "attempts": 1
+    },
+    {
+      "seed": "08_layernorm_no_eps.diff",
+      "op": "layernorm_fp32",
+      "tests_generated": 6,
+      "skills_used": [
+        "numerical"
+      ],
+      "fault_likely_caught": true,
+      "detail": "failed tests: test_layernorm_fp32_generated",
+      "critic_passed": false,
+      "critic_iterations": 2,
+      "critic_missing_count": 1,
+      "context_docs_used": 5,
+      "oracle_mode": "real",
+      "build_status": "ok",
+      "failed_test_names": [
+        "test_layernorm_fp32_generated"
+      ],
+      "oracle_reflexion_used": false,
+      "attempts": 1
+    },
+    {
+      "seed": "09_layernorm_var_n_minus_one.diff",
+      "op": "layernorm_fp32",
+      "tests_generated": 6,
+      "skills_used": [
+        "numerical"
+      ],
+      "fault_likely_caught": true,
+      "detail": "failed tests: test_layernorm_fp32_generated",
+      "critic_passed": false,
+      "critic_iterations": 2,
+      "critic_missing_count": 2,
+      "context_docs_used": 5,
+      "oracle_mode": "real",
+      "build_status": "ok",
+      "failed_test_names": [
+        "test_layernorm_fp32_generated"
+      ],
+      "oracle_reflexion_used": false,
+      "attempts": 1
+    },
+    {
+      "seed": "10_layernorm_int_mean.diff",
+      "op": "layernorm_fp32",
+      "tests_generated": 6,
+      "skills_used": [
+        "numerical"
+      ],
+      "fault_likely_caught": true,
+      "detail": "failed tests: test_layernorm_fp32_generated",
+      "critic_passed": false,
+      "critic_iterations": 2,
+      "critic_missing_count": 3,
+      "context_docs_used": 5,
+      "oracle_mode": "real",
+      "build_status": "ok",
+      "failed_test_names": [
+        "test_layernorm_fp32_generated"
+      ],
+      "oracle_reflexion_used": false,
+      "attempts": 1
+    }
+  ]
+}

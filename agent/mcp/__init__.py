@@ -1,11 +1,10 @@
-"""MCP integration package.
+"""MCP 集成包。
 
-The server lives in `agent.mcp.server` and is the entry point for the
-stdio MCP protocol. We deliberately avoid importing it at package import
-time so that running `python -m agent.mcp.server` doesn't trigger the
-"already in sys.modules" runtime warning.
+Server 在 `agent.mcp.server`，是 stdio MCP 协议的入口。我们故意不在 package
+import 时拉它，避免 `python -m agent.mcp.server` 时撞到 "already in sys.modules"
+的 runtime warning。
 
-Usage:
+用法：
     python -m agent.mcp.server
     tinyinfer-agent mcp-server
 """
